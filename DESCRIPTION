@@ -1,0 +1,44 @@
+Package: RPBCapp
+Type: Package
+Title: Tree Measurement In Radiata Pine Plantation App
+Version: 0.1.0
+Authors@R: c(
+    person(
+      "Jean-Romain", "Roussel",
+      email = "info@r-lidar.com",
+      role = c("aut", "cre")
+    )
+  )
+Description: Shiny app for individual tree measurement in RPBC's radiata pine plantation.
+Depends: 
+  R (>= 4.0.0), 
+  shiny,
+  bslib
+Import: 
+  lidR,
+  tools,
+  terra,
+  sf,
+  R6,
+  leaflet,
+  leaflet.extra,
+  leafem,
+  jsonlite,
+  bslib,
+  readxl
+Suggests:
+  rgl
+Remotes:
+    r-lidar/lasR
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.2
+Collate: 
+    'Layout.R'
+    'Plantation.R'
+    'alignment.R'
+    'process_lidar.R'
+    'segmentation.R'
+    'snake.R'
+    'zzz.R'
