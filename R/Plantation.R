@@ -14,8 +14,9 @@ Plantation <- R6::R6Class("Plantation",
     fschm = NULL,
     ftrees = NULL,
     fcrowns = NULL,
-    flayout = NULL,
     fmeasurements = NULL,
+
+    params = list(),
 
     # Objects
     las = NULL,             # LAS
@@ -28,6 +29,7 @@ Plantation <- R6::R6Class("Plantation",
     layout_warnings = NULL, # list with 2 sf POLYGON
     trees = NULL,           # sf POINT
     crowns = NULL,          # sf POLYGON
+    database = NULL,        # dataframe
 
     crs = NULL,             # sf::crs
 
@@ -35,7 +37,7 @@ Plantation <- R6::R6Class("Plantation",
     {
     },
 
-    set_crs = function(x)
+    set_crs = function(x, nowrite = FALSE)
     {
       if (is.null(self$crs))
         self$crs = sf::st_crs(x)
@@ -46,10 +48,11 @@ Plantation <- R6::R6Class("Plantation",
       if (!is.null(self$layout))
         self$layout$set_crs(x)
 
-      self$write_config()
+      if (!nowrite)
+        self$write_config()
     },
 
-    set_cloud = function(file)
+    set_cloud = function(file, nowrite = FALSE)
     {
       assert_file_exists(file)
 
@@ -69,12 +72,13 @@ Plantation <- R6::R6Class("Plantation",
       geom <- sf::st_sfc(geom)
       sf::st_crs(geom) <- crs
       self$bbox = geom
-      self$set_crs(crs)
+      self$set_crs(crs, nowrite)
 
-      self$write_config()
+      if (!nowrite)
+        self$write_config()
     },
 
-    set_boundaries = function(file)
+    set_boundaries = function(file, nowrite = FALSE)
     {
       print(file)
       assert_file_exists(file)
@@ -95,10 +99,11 @@ Plantation <- R6::R6Class("Plantation",
       self$boundaries = boundaries
       self$clip()
 
-      self$write_config()
+      if (!nowrite)
+        self$write_config()
     },
 
-    set_chm = function(file)
+    set_chm = function(file, nowrite = FALSE)
     {
       assert_file_exists(file)
 
@@ -106,10 +111,11 @@ Plantation <- R6::R6Class("Plantation",
       self$chm = terra::rast(file)
       self$clip()
 
-      self$write_config()
+      if (!nowrite)
+        self$write_config()
     },
 
-    set_dtm = function(file)
+    set_dtm = function(file, nowrite = FALSE)
     {
       assert_file_exists(file)
 
@@ -117,10 +123,11 @@ Plantation <- R6::R6Class("Plantation",
       self$dtm = terra::rast(file)
       self$clip()
 
-      self$write_config()
+      if (!nowrite)
+        self$write_config()
     },
 
-    set_schm = function(file)
+    set_schm = function(file, nowrite = FALSE)
     {
       assert_file_exists(file)
 
@@ -128,10 +135,29 @@ Plantation <- R6::R6Class("Plantation",
       self$schm = terra::rast(file)
       self$clip()
 
-      self$write_config()
+      if (!nowrite)
+        self$write_config()
     },
 
-    set_layout = function(file)
+    set_database = function(file, nowrite = TRUE)
+    {
+      assert_file_exists(file)
+
+      sheet_name = "Sorted Linear File"
+      sheets <- readxl::excel_sheets(file)
+      if (!sheet_name %in% sheets)
+        stop(paste("Sheet", sheet_name, "does not exist in the Excel file"))
+
+      self$database = readxl::read_excel(file, sheet = sheet_name)
+      self$fdatabase = file
+
+      self$set_layout(file, nowrite)
+
+      if (!nowrite)
+        self$write_config()
+    },
+
+    set_layout = function(file, nowrite = FALSE)
     {
       assert_file_exists(file)
 
@@ -139,10 +165,11 @@ Plantation <- R6::R6Class("Plantation",
       self$layout$read_layout(file)
       self$fdatabase = file
 
-      self$write_config()
+      if (!nowrite)
+        self$write_config()
     },
 
-    set_layout_parameter = function(block_size, num_trees, start, orientation)
+    set_layout_parameter = function(block_size, num_trees, start, orientation, nowrite = FALSE)
     {
       if (is.null(self$layout))
         stop("No 'layout' object yet. Read and Excel file first")
@@ -169,18 +196,46 @@ Plantation <- R6::R6Class("Plantation",
         self$layout$set_origin(origin[1], origin[2])
       }
 
-      self$write_config()
+      if (!nowrite)
+        self$write_config()
     },
 
-    set_measurements = function(file)
+    set_measurements = function(file, nowrite = FALSE)
     {
       assert_file_exists(file)
 
       self$trees = sf::st_read(file, layer = "trees", quiet = TRUE)
       self$crowns = sf::st_read(file, layer = "crowns", quiet = TRUE)
-      self$fmeasurement = file
+      self$fmeasurements = file
 
-      self$write_config()
+      if (!nowrite)
+        self$write_config()
+    },
+
+    process_pointcloud = function(rigidness = 2, cloth_resolution = 0.5, smoothCHM = 2, smoothPasses = 2, res = 0.1, progress = NULL)
+    {
+      prog <- make_progress(progress, 7)
+      on.exit(prog$finalize(), add = TRUE)
+
+      prog$tick(1, detail = "Reading points cloud...")
+      self$read_cloud()
+
+      prog$tick(2,  detail = "Classifying ground points...")
+      self$classify_ground(rigidness = rigidness, cloth_resolution = cloth_resolution)
+
+      prog$tick(3,  detail = "Computing DTM...")
+      self$compute_terrain()
+
+      prog$tick(4,  detail = "Computing CHM...")
+      self$compute_chm(res)
+
+      prog$tick(5,  detail = "Computing smooth CHM...")
+      self$smooth_chm(smoothCHM, smoothPasses)
+
+      prog$tick(6,  detail = "Clipping...")
+      self$clip()
+
+      prog$tick(7,  detail = "Done")
     },
 
     adjust_layout = function(hmin = 2, progress = NULL)
@@ -226,11 +281,11 @@ Plantation <- R6::R6Class("Plantation",
       self$trees = ans$trees
       self$crowns = ans$crowns
 
-      if (is.null(self$fmeasurement))
-        self$fmeasurement = past0(self$wd,  "tree_measurements.gpkg")
+      if (is.null(self$fmeasurements))
+        self$fmeasurements = paste0(self$wd,  "/tree_measurements.gpkg")
 
-      sf::st_write(self$trees, dsn = self$fmeasurement, layer = "trees", quiet = TRUE, append = FALSE)
-      sf::st_write(self$crowns, dsn = self$fmeasurement, layer = "crowns", quiet = TRUE, append = FALSE)
+      sf::st_write(self$trees, dsn = self$fmeasurements, layer = "trees", quiet = TRUE, append = FALSE)
+      sf::st_write(self$crowns, dsn = self$fmeasurements, layer = "crowns", quiet = TRUE, append = FALSE)
 
       self$write_config()
     },
@@ -332,16 +387,14 @@ Plantation <- R6::R6Class("Plantation",
       if (is.null(self$flas))
         stop("No file point cloud file registered. Select a file first")
 
-      assert_file_exists(self$las)
+      assert_file_exists(self$flas)
 
       self$las = lidR::readLAS(self$flas, select = "xyzc")
-
-      self$write_config()
     },
 
     classify_ground = function(rigidness = 2, cloth_resolution = 0.5)
     {
-      assert_point_cload_loaded(self$las)
+      assert_point_cloud_loaded(self$las)
 
       if (!any(self$las$Classification == 2L))
       {
@@ -353,20 +406,20 @@ Plantation <- R6::R6Class("Plantation",
 
     compute_terrain = function(res = 0.5)
     {
-      assert_point_cload_loaded(self$las)
+      assert_point_cloud_loaded(self$las)
 
       gnd = lidR::filter_ground(self$las)
       if (lidR::npoints(gnd) == 0)
         stop("No ground points. Process aborted")
 
       gnd = lidR::decimate_points(gnd, lidR::lowest(0.5))
-      dtm = lidR::rasterize_terrain(gnd, res, tin())
+      dtm = lidR::rasterize_terrain(gnd, res, lidR::tin())
 
       # Save on disk
       if (!is.null(self$wd))
       {
         self$fdtm = paste0(self$wd, "/dtm.tif")
-        terra::writeRaster(dtm, self$fdtm)
+        terra::writeRaster(dtm, self$fdtm, overwrite = TRUE)
         self$dtm = terra::rast(self$fdtm)
       }
 
@@ -375,14 +428,20 @@ Plantation <- R6::R6Class("Plantation",
 
     compute_chm = function(res = 0.1)
     {
-      assert_point_cload_loaded(self$las)
+      assert_point_cloud_loaded(self$las)
+
       chm = lidR::rasterize_canopy(self$las, res)
+      chm = lidR::pitfill_stonge2008(chm)
+
+      dtm = self$dtm
+      dtm <- terra::resample(dtm, chm, method = "bilinear")  # or "near" if categorical
+      chm = chm - dtm
 
       # Save on disk
       if (!is.null(self$wd))
       {
         self$fchm = paste0(self$wd, "/chm.tif")
-        terra::writeRaster(chm, self$fchm)
+        terra::writeRaster(chm, self$fchm, overwrite = TRUE)
         self$chm = terra::rast(self$fchm)
       }
 
@@ -403,11 +462,13 @@ Plantation <- R6::R6Class("Plantation",
       for (i in 1:passes)
         schm = terra::focal(schm, w, "mean", na.rm = TRUE)
 
+      names(schm) = names(self$chm)
+
       # Save on disk
       if (!is.null(self$wd))
       {
         self$fschm = paste0(self$wd, "/schm.tif")
-        terra::writeRaster(chm, self$fschm)
+        terra::writeRaster(schm, self$fschm, overwrite = TRUE)
         self$schm = terra::rast(self$fschm)
       }
 
@@ -457,7 +518,7 @@ Plantation <- R6::R6Class("Plantation",
         if (terra::inMemory(self$schm))
         {
           o = tempfile(fileext = ".tif")
-          terra::writeRaster(self$schm, o)
+          terra::writeRaster(self$schm, o, overwrite = TRUE)
           self$schm = terra::rast(o)
         }
 
@@ -478,7 +539,7 @@ Plantation <- R6::R6Class("Plantation",
         if (terra::inMemory(self$chm))
         {
           o = tempfile(fileext = ".tif")
-          terra::writeRaster(self$chm, o)
+          terra::writeRaster(self$chm, o, overwrite = TRUE)
           self$chm = terra::rast(o)
         }
 
@@ -529,6 +590,14 @@ Plantation <- R6::R6Class("Plantation",
         data = sf::st_transform(self$layout$tree_layout_adjusted, 4326)
         map = map |> leaflet::addPolygons(data = sf::st_transform(self$layout_warnings$warn, 4326), opacity = 0.9, group = "Warnings", color = ~pal(reason), fill = FALSE, weight = 3)
         overlayGroups = c(overlayGroups, "Warnings")
+
+        map = map |>
+          leaflet::addLegend(
+            position = "bottomleft",
+            pal = pal,
+            values = reason,
+            title = "Warnings"
+          )
       }
 
       if (!is.null(self$crowns) & trees)
@@ -544,7 +613,21 @@ Plantation <- R6::R6Class("Plantation",
       if (!is.null(self$layout) & layout)
       {
         data = sf::st_transform(self$layout$tree_layout_adjusted, 4326)
-        map = map |> leaflet::addCircleMarkers(data = data, group = "Tree layout", radius = 1)
+
+        if (!is.null(data$TreeFound)) {
+          col = ifelse(data$TreeFound, "green", "red")
+
+        map =  map |> leaflet::addLegend(
+            position = "bottomright",
+            colors = c("green", "red"),
+            labels = c("Tree found", "Tree not found"),
+            title = "Tree status")
+
+        } else {
+          col = "#03F"  # fallback if no TreeFound column
+        }
+
+        map = map |> leaflet::addCircleMarkers(data = data, color = col, group = "Tree layout", radius = 1)
         overlayGroups = c(overlayGroups, "Tree layout")
       }
 
@@ -557,7 +640,7 @@ Plantation <- R6::R6Class("Plantation",
         map = map |> leaflet::addCircleMarkers(
           data = data,
           group = "Trees",
-          radius = 2,
+          radius = 4,
           color = ~pal(Height),
           fillOpacity = 0.9,
           stroke = FALSE,
@@ -636,19 +719,13 @@ Plantation <- R6::R6Class("Plantation",
         zmin = self$las@header[["Min Z"]]
         zmax = self$las@header[["Max Z"]]
         offset = c((xmin+xmax)/2, (ymin+ymax)/2, zmin)
-      }
-      else if (!is.null(self$bbox))
-      {
+      } else if (!is.null(self$bbox)) {
         coords <- sf::st_coordinates(self$bbox)
         offset = c(mean(coords[,1]), mean(coords[,2]),mean(coords[,3]))
-      }
-      else if (!is.null(self$boundaries))
-      {
+      } else if (!is.null(self$boundaries)) {
         coords <- sf::st_coordinates(self$boundaries)
         offset = c(mean(coords[,1]), mean(coords[,2]),mean(coords[,3]))
-      }
-      else if (!is.null(self$chm))
-      {
+      } else if (!is.null(self$chm)) {
         e = terra::ext(self$chm)
         z = min(terra::values(self$chm), na.rm = T)
         offset = c(e[1], e[3], z)
@@ -661,14 +738,14 @@ Plantation <- R6::R6Class("Plantation",
         xyz <- cbind(coords[, 1:2], z)
         xyz[,1] = xyz[,1] - offset[1]
         xyz[,2] = xyz[,2] - offset[2]
-        lines3d(xyz, col = "red", lwd = 2)
+        rgl::lines3d(xyz, col = "red", lwd = 2, tag = "bbox")
       }
 
       if (!is.null(self$dtm))
       {
-        lidR::add_dtm3d(offset[1:2], self$dtm)
+        dtm = terra::aggregate(self$dtm)
+        lidR::add_dtm3d(offset[1:2], dtm-offset[3], tag = "dtm")
       }
-
 
       if (!is.null(self$boundaries))
       {
@@ -677,90 +754,110 @@ Plantation <- R6::R6Class("Plantation",
         xyz <- cbind(coords[, 1:2], z)
         xyz[,1] = xyz[,1] - offset[1]
         xyz[,2] = xyz[,2] - offset[2]
-        lines3d(xyz, col = "green", lwd = 2)
+        rgl::lines3d(xyz, col = "green", lwd = 2, tag = "boundaries")
       }
 
       if (!is.null(self$las))
       {
         las = self$las
-        n = lidR::npoints(las)
+
+        gnd = lidR::filter_ground(las)
+        ngnd = lidR::filter_poi(las, Classification != lidR::LASGROUND)
+        n = lidR::npoints(ngnd)
         if (n > 1000000)
         {
           r = ceiling(n/1000000)
-          las <- las[seq(1, n, by = r)]
+          ngnd <- ngnd[seq(1, n, by = r)]
         }
         pal = lidR::height.colors(25)
-        col = lidR:::set.colors(las$Z, pal)
-        rgl::points3d(las$X-offset[1], las$Y-offset[2], las$Z-offset[3], col = col, size = 2)
+        col = lidR:::set.colors(ngnd$Z, pal)
+        rgl::points3d(gnd$X-offset[1], gnd$Y-offset[2], gnd$Z-offset[3], col = "blue", size = 2, tag = "ground")
+        rgl::points3d(ngnd$X-offset[1], ngnd$Y-offset[2], ngnd$Z-offset[3], col = col, size = 2, tag = "vegetation")
       }
 
-      if (!is.null(self$chm))
-      {
-        r = self$chm
-        r = terra::aggregate(r, fact = 2)
-        mat <- terra::as.matrix(r, wide=T)
-
-        ext <- ext(r)
-        x <- seq(ext[1], ext[2], length.out = ncol(mat))
-        y <- seq(ext[3], ext[4], length.out = nrow(mat))
-
-        mat_flip <- t(mat[nrow(mat):1, ])
-
-        rgl::surface3d(x-offset[1], y-offset[2], mat_flip-offset[3], lidR::height.colors(50)[cut(mat_flip, 50)], back = "lines")
-      }
+      # if (!is.null(self$chm))
+      # {
+      #   r = self$chm
+      #   r = terra::aggregate(r, fact = 2)
+      #   mat <- terra::as.matrix(r, wide=T)
+      #
+      #   ext <- ext(r)
+      #   x <- seq(ext[1], ext[2], length.out = ncol(mat))
+      #   y <- seq(ext[3], ext[4], length.out = nrow(mat))
+      #
+      #   mat_flip <- t(mat[nrow(mat):1, ])
+      #
+      #   rgl::surface3d(x-offset[1], y-offset[2], mat_flip-offset[3], lidR::height.colors(50)[cut(mat_flip, 50)], back = "lines")
+      # }
     },
 
     create_config = function(file)
     {
+      assert_file_ext(file, "rpbc")
+
       self$wd = dirname(file)
-      self$write_config(file)
+      self$fconfig = file
+      self$write_config()
     },
 
     read_config = function(file)
     {
+      assert_file_ext(file, "rpbc")
+
       self$wd = dirname(file)
       self$fconfig = file
 
       config = jsonlite::read_json(file)
-      if (!is.null(config$point_cloud)) self$set_cloud(config$point_cloud$file)
-      if (!is.null(config$boundaries)) self$set_boundaries(config$boundaries$file)
-      if (!is.null(config$dtm)) self$set_dtm(config$dtm$file)
-      if (!is.null(config$chm)) self$set_chm(config$chm$file)
-      if (!is.null(config$schm)) self$set_schm(config$schm$file)
+      if (!is.null(config$point_cloud)) self$set_cloud(config$point_cloud$file, nowrite = TRUE)
+      if (!is.null(config$boundaries)) self$set_boundaries(config$boundaries$file, nowrite = TRUE)
+      if (!is.null(config$dtm)) self$set_dtm(config$dtm$file, nowrite = TRUE)
+      if (!is.null(config$chm)) self$set_chm(config$chm$file, nowrite = TRUE)
+      if (!is.null(config$schm))
+      {
+        self$set_schm(config$schm$file, nowrite = TRUE)
+        self$params$smoothCHM = config$schm$smoothCHM
+        self$params$smoothPasses = config$schm$smoothPasses
+      }
       if (!is.null(config$layout))
       {
-        self$flayout = config$layout$file
-        self$set_layout(config$layout$file)
+        self$set_layout(config$layout$file, nowrite = TRUE)
         if (!is.null(config$layout$block_size))
         {
           self$set_layout_parameter(
             block_size = config$layout$block_size,
             num_trees = config$layout$num_trees,
             start = config$layout$start,
-            orientation = config$layout$orientation)
+            orientation = config$layout$orientation,
+            nowrite = TRUE)
         }
 
         if (!is.null(config$layout$origin))
-          self$layout$set_origin(config$layout$origin[1], config$layout$origin[2])
+          self$layout$set_origin(config$layout$origin[[1]], config$layout$origin[[2]])
 
         if (!is.null(config$layout$angle))
           self$layout$set_angle(config$layout$angle)
       }
+      if (!is.null(config$measurements)) self$set_measurements(config$measurements$file, nowrite = TRUE)
+      if (!is.null(config$database)) self$fdatabase = config$database$file
     },
 
     write_config = function()
     {
       if (is.null(self$fconfig))
-        warning("Impossible to save the project. No project file associate.")
+        stop("Impossible to save the project. No project file associated.")
 
       config = list()
       config$point_cloud = list(file = self$flas)
       config$boundaries = list(file = self$fboundaries)
       config$dtm = list(file = self$fdtm)
       config$chm = list(file = self$fchm)
-      config$schm = list(file = self$fschm)
+      config$schm = list(
+        file = self$fschm,
+        smoothCHM = self$params$smoothCHM,
+        smoothPasses = self$params$smoothPasses
+      )
       config$layout = list(
-        file = self$flayout,
+        file = self$fdatabase,
         block_size = self$layout$block_size,
         num_trees = self$layout$num_trees,
         start = self$layout$start,
@@ -769,7 +866,10 @@ Plantation <- R6::R6Class("Plantation",
         origin = self$layout$origin
       )
       config$measurements = list(
-        file = self$fmeasurement
+        file = self$fmeasurements
+      )
+      config$database = list(
+        file = self$fdatabase
       )
       config$crs = list(
         wkt = self$crs$wkt,
@@ -787,7 +887,7 @@ Plantation <- R6::R6Class("Plantation",
 
       config = rmNullObs(config)
 
-      jsonlite::write_json(config, self$fconfig)
+      jsonlite::write_json(config, self$fconfig, pretty = TRUE, auto_unbox = TRUE)
     },
 
     state = function()
@@ -795,10 +895,9 @@ Plantation <- R6::R6Class("Plantation",
       list(
         chm = !is.null(self$chm),
         schm = !is.null(self$schm),
-        dtm = !is.null(self$dtm),
         layout = !is.null(self$layout),
         trees = !is.null(self$trees),
-        crowns = !is.null(self$crowns),
+        crowns = !is.null(self$crowns)
       )
     }
   )
@@ -816,10 +915,21 @@ assert_sf_polygon = function(sf)
     stop(paste0("Entities are expected to be POLYGON not ", sf::st_geometry_type(sf)))
 }
 
-assert_point_cload_loaded = function(las)
+assert_point_cloud_loaded = function(las)
 {
   if (is.null(las))
     stop("No point cloud loaded yet")
+}
+
+assert_file_ext <- function(file, expected_ext) {
+  ext <- tools::file_ext(file)
+  if (tolower(ext) != tolower(expected_ext)) {
+    stop(sprintf(
+      "Invalid file extension: '%s'. Expected '.%s'.",
+      ext, expected_ext
+    ), call. = FALSE)
+  }
+  invisible(TRUE)
 }
 
 short_path <- function(paths, max_chars = 40) {

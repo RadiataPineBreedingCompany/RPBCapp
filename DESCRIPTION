@@ -39,6 +39,7 @@ Collate:
     'Plantation.R'
     'alignment.R'
     'process_lidar.R'
+    'progress.R'
     'segmentation.R'
     'snake.R'
     'zzz.R'

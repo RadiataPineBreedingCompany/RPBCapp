@@ -57,7 +57,7 @@ ui <- page_navbar(
   nav_panel(
     title = "1. Project",
     layout_columns(
-      col_widths = c(6, 6), # two equal columns for cards
+      col_widths = c(4, 8), # two equal columns for cards
       card(
         full_screen = FALSE,
         card_header("New project"),
@@ -130,12 +130,22 @@ ui <- page_navbar(
         )
       ),
 
-      card(
-        full_screen = TRUE,
-        card_header("Project Data"),
-        card_body(
-          DT::DTOutput("fileTable")
-        )
+      layout_columns(
+        col_widths = c(8,4),
+        card(
+          full_screen = TRUE,
+          card_header("Project Data"),
+          card_body(
+            DT::DTOutput("fileTable")
+          )
+        ),
+        card(
+          full_screen = TRUE,
+          card_header("Project state"),
+          card_body(
+            DT::DTOutput("stateTable")
+          )
+        ),
       )
     )
   ),
@@ -148,17 +158,20 @@ ui <- page_navbar(
       sidebar = sidebar(width = 300,
         wellPanel(
           tags$p(tags$strong("Ground Filtering")),
-          sliderInput("rigidness", "Rigidness", min = 0, max = 10, value = 2, step = 0.1),
-          sliderInput("cloth_resolution", "Cloth resolution", min = 0.1, max = 5, value = 0.5, step = 0.1)
+          sliderInput("rigidness", "Rigidness", min = 1, max = 3, value = 2, step = 1),
+          sliderInput("cloth_resolution", "Cloth resolution", min = 0.1, max = 2, value = 0.5, step = 0.1)
         ),
         wellPanel(
           tooltiped(tags$strong("CHM Parameters"), "Using the default parameters is recommanded"),
-          sliderInput("res", "CHM resolution (m)", min = 0.02, max = 1, value = 0.1, step = 0.01),
-          sliderInput("smooth", "CHM smoothing (m)", min = 0, max = 3, value = 1, step = 0.1)
+          sliderInput("res", "CHM resolution (m)", min = 0.02, max = 1, value = 0.1, step = 0.01)
         ),
         actionButton("processPointCloudButton", "Process")
       ),
-      p("Second page content.")),
+      div(
+        style = "width: 100%; height: 100%;",
+        rgl::rglwidgetOutput("rglplot3d",width = "100%", height = "100%")
+      )
+    )
   ),
 
   # ---- nav 3 chm ----
@@ -194,8 +207,8 @@ ui <- page_navbar(
 
           radioButtons(
             "partternStartChoiceRadioButton", "Select the start point:",
-            choices = c("Botton-left" = "bl",
-                        "Botton-right" = "br",
+            choices = c("Bottom-left" = "bl",
+                        "Bottom-right" = "br",
                         "Top-left" = 'tl',
                         "Top right" = "tr"),
             selected = "bl",
@@ -277,6 +290,27 @@ ui <- page_navbar(
   # ---- nav 7 statistics ----
   nav_panel(
     title = "7. Statistics",
+
+    layout_column_wrap(
+      width = 1/3,  # three boxes in one row
+      uiOutput("vb_found"),
+      uiOutput("vb_missing"),
+      uiOutput("vb_non_measured")
+    ),
+
+    # cards with ggplots
+    layout_column_wrap(
+      width = 1/3,  # 2 cards per row
+      !!!lapply(1:6, function(i) {
+        card(
+          full_screen = TRUE,
+          card_header(paste("Plot", i)),
+          card_body(
+            plotOutput(paste0("ggplot", i))
+          )
+        )
+      })
+    )
   ),
 
   nav_spacer(),
@@ -299,13 +333,16 @@ server <- function(input, output, session)
   update_chm_map     <- reactiveVal(0)
   update_layout_plot <- reactiveVal(0)
   update_file_table  <- reactiveVal(0)
-  save               <- reactiveVal(0)
+  update_state_table <- reactiveVal(0)
+  update_stats_ui    <- reactiveVal(0)
+  update_rgl_view    <- reactiveVal(0)
+  saveProject        <- reactiveVal(0)
 
-  volumes <- c(RPBC = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/19BP01_test/",
+  volumes <- c(RPBC = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/",
                Home = fs::path_home(),
                shinyFiles::getVolumes()())
   shinyFiles::shinyFileChoose(input, "loadLasFileButton", roots = volumes, filetypes = c('las', "laz"))
-  shinyFiles::shinyFileChoose(input, "loadCHMFileButton", roots = volumes, filetypes = c('tiff'))
+  shinyFiles::shinyFileChoose(input, "loadCHMFileButton", roots = volumes, filetypes = c('tif', 'tiff'))
   shinyFiles::shinyFileChoose(input, "loadConfigFileButton", roots = volumes, filetypes = c('rpbc'))
   shinyFiles::shinyFileChoose(input, "loadBoundaryFileButton", roots = volumes, filetypes = c('shp', "gpkg"))
   shinyFiles::shinyFileChoose(input, "loadBlockPatternFileButton", roots = volumes, filetypes = c('xls', 'xlsx'))
@@ -328,6 +365,7 @@ server <- function(input, output, session)
   observeEvent(input$createProjectButton, {
 
     file <- shinyFiles::parseSavePath(volumes, input$createProjectButton)$datapath
+    print(file)
 
     if (!is.null(file) && length(file) > 0)
     {
@@ -341,6 +379,7 @@ server <- function(input, output, session)
         popup_error(conditionMessage(e))
       })
       update_file_table(runif(1))
+      update_state_table(runif(1))
     }
 
   }, ignoreInit = TRUE)
@@ -357,12 +396,28 @@ server <- function(input, output, session)
       tryCatch({
         plantation$read_config(file)
 
-        # TODO: update the UI
+        if (!is.null(plantation$layout))
+        {
+          updateNumericInput(session, "blockSizeInput",  value = plantation$layout$block_size)
+          updateNumericInput(session, "treeNumberInput", value = plantation$layout$num_trees)
+          updateRadioButtons(session, "partternStartChoiceRadioButton", selected = plantation$layout$start)
+          updateRadioButtons(session, "partternOrientationChoiceRadioButton", selected = plantation$layout$orientation)
+        }
+
+        if (!is.null(plantation$schm))
+        {
+          updateSliderInput(session, "smoothCHM", value = plantation$params$smoothCHM)
+          updateSliderInput(session, "smoothPasses", value = plantation$params$smoothPasses)
+        }
 
         update_file_table(runif(1))
+        update_state_table(runif(1))
         update_layout_map(runif(1))
+        update_tree_map(runif(1))
         update_chm_map(runif(1))
+        update_rgl_view(runif(1))
         update_preview_map(runif(1))
+        update_stats_ui(runif(1))
       },
       error = function(e)
       {
@@ -380,7 +435,7 @@ server <- function(input, output, session)
       showNotification("Loading block layout")
 
       tryCatch({
-        plantation$set_layout(file)
+        plantation$set_database(file)
         plantation$set_layout_parameter(
           input$blockSizeInput,
           input$treeNumberInput,
@@ -399,17 +454,23 @@ server <- function(input, output, session)
   # ===== OnClick loadBoundaryFileButton ====
   observeEvent(input$loadBoundaryFileButton, {
 
-    file <- shinyFiles::parseFilePaths(volumes, input$loadBlockPatternFileButton)$datapath
+    file <- shinyFiles::parseFilePaths(volumes, input$loadBoundaryFileButton)$datapath
 
-    tryCatch({
-      showNotification("Loading boundaries polygon")
-      plantation$set_boundaries(file)
-      update_previev_map(runif(1))
-    },
-    error = function(e)
+    if (!is.null(file) && length(file) > 0)
     {
-      popup_error(conditionMessage(e))
-    })
+      showNotification("Loading boundaries polygon")
+
+      tryCatch({
+
+        plantation$set_boundaries(file)
+        update_preview_map(runif(1))
+        update_file_table(runif(1))
+      },
+      error = function(e)
+      {
+        popup_error(conditionMessage(e))
+      })
+    }
   })
 
   # ===== OnClick loadCHMFileButton ====
@@ -420,9 +481,10 @@ server <- function(input, output, session)
     tryCatch({
       showNotification("Loading CHM")
       plantation$set_chm(file)
-      update_previev_map(runif(1))
+      update_preview_map(runif(1))
       update_chm_map(runif(1))
       update_file_table(runif(1))
+      update_state_table(runif(1))
     },
     error = function(e)
     {
@@ -438,6 +500,7 @@ server <- function(input, output, session)
       plantation$smooth_chm(input$smoothCHM, input$smoothPasses)
       update_chm_map(runif(1))
       update_file_table(runif(1))
+      update_state_table(runif(1))
     },
     error = function(e)
     {
@@ -451,9 +514,23 @@ server <- function(input, output, session)
     showNotification("Aligning tree layout")
 
     tryCatch({
-      angle = layout_alignment_angle(plantation$layout$tree_layout, plantation$schm, plantation$layout$origin, plantation$layout$spacing*0.75)
+      res = layout_alignment_angle(
+        plantation$layout$tree_layout,
+        plantation$schm,
+        plantation$layout$origin,
+        plantation$layout$spacing*0.75,
+        plantation$boundaries)
+      angle = res[1]
+      tx = res[2]
+      ty = res[3]
+      origin = plantation$layout$origin
+      origin[1] = origin[1] + tx
+      origin[2] = origin[2] + ty
       plantation$layout$set_angle(-angle)
+      plantation$layout$set_origin(origin[1], origin[2])
       update_layout_map(runif(1))
+      update_state_table(runif(1))
+      saveProject(runif(1))
     },
     error = function(e)
     {
@@ -494,6 +571,8 @@ server <- function(input, output, session)
         plantation$measure_trees(hmin, progress = incProgress)
       })
       update_tree_map(runif(1))
+      update_state_table(runif(1))
+      update_stats_ui(runif(1))
     },
     error = function(e)
     {
@@ -530,36 +609,20 @@ server <- function(input, output, session)
   observeEvent(input$processPointCloudButton, {
     tryCatch({
       withProgress(message = 'Processing', value = 0, {
-        n = 11;
 
         if (is.null(plantation)) {
           stop("Uninitialized plantation.")
         }
 
-        incProgress(1/n, detail = "Reading points cloud...")
-        plantation$read_cloud()
+        plantation$process_pointcloud(
+          input$rigidness,
+          cloth_resolution = input$cloth_resolution,
+          smoothCHM = input$smoothCHM,
+          smoothPasses = input$smoothPasses,
+          progress = incProgress)
 
-        incProgress(2/n, detail = "Classifying ground points...")
-        plantation$classify_ground(rigidness = input$rigidness, cloth_resolution = input$cloth_resolution)
-
-        incProgress(2/n, detail = "Computing DTM...")
-        plantation$compute_terrain()
-
-        incProgress(1/n, detail = "Computing CHM...")
-        plantation$compute_chm(input$res)
-
-        incProgress(2/n, detail = "Computing smooth CHM...")
-        plantation$smooth_chm(input$smoothCHM, input$smoothPasses)
-
-        plantation$clip()
-
-        incProgress(1/n, detail = "Rendering map...")
-        output$map <- leaflet::renderLeaflet(plantation$leaflet())
-
-        incProgress(1/n, detail = "Rendering 3D...")
-        output$rglPlot <- renderRglwidget({plantation$plot(TRUE);rglwidget()})
-
-        incProgress(1/n, detail = "Done")
+        update_preview_map(runif(1))
+        update_rgl_view(runif(1))
       })
     },
     error = function(e) {
@@ -612,6 +675,19 @@ server <- function(input, output, session)
       update_layout_plot(runif(1))
     }
   )
+
+  observe({
+    val <- saveProject()
+    if (val != 0)
+    {
+      tryCatch({
+        plantation$write_config()
+      },
+      error = function(e) {
+        popup_error(conditionMessage(e))
+      })
+    }
+  })
 
   # ===== OnClick tree Zero =====
   output$clickTreeZeroInfo <- renderUI({
@@ -679,12 +755,94 @@ server <- function(input, output, session)
     na.omit(files_df)
   }, options = list(dom = 't', pageLength = 100))
 
+  output$stateTable <- DT::renderDT({
+    update_state_table()
+
+    status_list <- plantation$state()
+
+    df <- data.frame(
+      Layer = names(status_list),
+      Status = unlist(status_list),
+      stringsAsFactors = FALSE
+    )
+
+    # Replace TRUE/FALSE with HTML icons
+    df$Status <- ifelse(
+      df$Status,
+      "<i class='fa fa-check-circle' style='color: green;'></i>",
+      "<i class='fa fa-times-circle' style='color: red;'></i>"
+    )
+
+    DT::datatable(
+      df,
+      escape = FALSE,   # allow HTML icons
+      rownames = FALSE,
+      options = list(dom = 't', pageLength = 100)
+    )
+  })
+
   # ==== update plot ====
   output$plantationLayoutImage <- renderPlot({
     update_layout_plot()
     validate(need(!is.null(plantation$layout), "No block layout file selected yet"))
     print(plantation$layout)
     plantation$layout$plot()
+  })
+
+  output$rglplot3d <- rgl::renderRglwidget({
+    update_rgl_view()
+    showNotification("Rendering 3D scene")
+    plantation$plot(TRUE)
+    u = rgl::rglwidget()
+    u |> rgl::toggleWidget(tags = "bbox") |>
+      rgl::toggleWidget(tags = "boundaries") |>
+      rgl::toggleWidget(tags = "ground") |>
+      rgl::toggleWidget(tags = "vegetation")
+    u
+  })
+
+  # === update ui ====
+  output$vb_found <- renderUI({
+    update_stats_ui()
+
+    # Measured
+    N = nrow(plantation$trees)
+    n = sum(plantation$trees$ApexFound)
+    p = round(n/N*100,1)
+
+    value_box(
+      title = "Trees Found",
+      value = paste0(n, " (", p, "%)"),
+      theme_color = "success"
+    )
+  })
+
+  output$vb_missing <- renderUI({
+    update_stats_ui()
+
+    N = nrow(trees)
+    n = sum(plantation$trees$ApexFound | plantation$trees$TreeFound)
+    p = round((N-n)/N*100,1)
+
+    value_box(
+      title = "Missing Trees",
+      value = paste0((N-n), " (", p, "%)"),
+      theme_color = "primary"
+    )
+  })
+
+  output$vb_non_measured <- renderUI({
+    update_stats_ui()
+
+    N = nrow(plantation$trees)
+    n = sum(!plantation$trees$ApexFound & plantation$trees$TreeFound)
+    p = round(n/N*100,1)
+
+    value_box(
+      title = "Non-measured Trees",
+      value = paste0(n, " (", p, "%)"),
+      theme_color = "danger"
+    )
   })
 }
 

@@ -1,34 +1,10 @@
 extract_with_buffer = function(raster, points, buffer)
 {
+  names(raster) = "Z"
   discs = sf::st_as_sf(sf::st_buffer(points, buffer))
   ans = terra::extract(raster, discs, xy = TRUE)
   ans = data.table::as.data.table(ans)
   ans
-}
-
-# console and shiny progress bar interface
-make_progress <- function(progress, iterations)
-{
-  if (is.null(progress)) {
-    # Console mode
-    pb <- txtProgressBar(min = 0, max = iterations, style = 3)
-    force(pb)
-    return(list(
-      tick = function(i, detail = "") setTxtProgressBar(pb, i),
-      finalize = function() close(pb)
-    ))
-  } else {
-    # Shiny mode
-    done <- 0
-    return(list(
-      tick = function(i, detail = "") {
-        delta <- i - done
-        done <<- i
-        progress(delta/iterations, detail = detail)
-      },
-      finalize = function() {}
-    ))
-  }
 }
 
 #' @export
@@ -54,7 +30,7 @@ relocate_trees = function(chm, echm, plan, spacing, hmin, progress = NULL)
     prog$tick(i)
 
     ans = extract_with_buffer(echm, tmp, search_radius)
-    j = ans[, .I[which.max(max)], by = ID]$V1
+    j = ans[, .I[which.max(Z)], by = ID]$V1
     tmp = ans[j]
 
     tmp = sf::st_as_sf(tmp, coords = c("x", "y"))
@@ -69,7 +45,7 @@ relocate_trees = function(chm, echm, plan, spacing, hmin, progress = NULL)
   # -------------------------------------------
 
   neighborhood <- extract_with_buffer(chm, tmp, search_radius)
-  local_max_values = aggregate(neighborhood$max, by = list(neighborhood$ID), max)$x
+  local_max_values = aggregate(neighborhood$Z, by = list(neighborhood$ID), max)$x
 
   tmp$Height = round(local_max_values, 2)
 
@@ -80,7 +56,7 @@ relocate_trees = function(chm, echm, plan, spacing, hmin, progress = NULL)
 
   point_values <- terra::extract(echm, tmp)[,2]
   neighborhood <- extract_with_buffer(echm, tmp, search_radius)
-  local_max_values = aggregate(neighborhood$max, by = list(neighborhood$ID), max)$x
+  local_max_values = aggregate(neighborhood$Z, by = list(neighborhood$ID), max)$x
   h = tmp$Height
   h[is.na(h)] = -1
   is_local_max <- point_values == local_max_values & distance < max_adjustment & h > hmin
@@ -102,14 +78,15 @@ relocate_trees = function(chm, echm, plan, spacing, hmin, progress = NULL)
 
   # For non local max, estimate the local min value. Maybe the point is in or close to a gap
   neighborhood <- extract_with_buffer(chm, plan[!is_local_max,], search_radius)
-  local_min_values = aggregate(neighborhood$max, by = list(neighborhood$ID), min)$x
+  local_min_values = aggregate(neighborhood$Z, by = list(neighborhood$ID), min)$x
   tmp$Height[!is_local_max] = round(local_min_values, 2)
 
   trees = plan
   sf::st_geometry(trees) <- sf::st_geometry(tmp)
   trees$Height = tmp$Height
-  trees$TreeFound = tmp$Height >= hmin & is_local_max
+  trees$TreeFound = tmp$Height >= hmin
   trees$ApexFound = is_local_max
+  trees$TreeFound[trees$ApexFound == FALSE & is.na(trees$TreeFound)] = TRUE
   sf::st_geometry(trees) = sf::st_geometry(tmp)
 
   trees$ID = NULL
@@ -189,6 +166,9 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
   prog <- make_progress(progress, 3)
   on.exit(prog$finalize(), add = TRUE)
 
+  names(chm) = "Z"
+  names(echm) = "Z"
+
   col = lidR::pastel.colors(nrow(trees))
 
   prog$tick(1, "Individual tree segmentation")
@@ -227,7 +207,7 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
 
   # Extract pixel values for each crown to estimate the height
   val = terra::extract(chm, pcrown)
-  height = aggregate(val$max, by = list(val$ID), max, na.rm = TRUE)$x
+  height = aggregate(val$Z, by = list(val$ID), max, na.rm = TRUE)$x
   height[is.infinite(height)] = NA
 
   area = round(as.numeric(sf::st_area(pcrown)), 2)
@@ -248,12 +228,13 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
   # Remove polygon for which with have no apex
   sf::st_geometry(pcrown)[pcrown$ApexFound == FALSE] <- sf::st_sfc(sf::st_geometrycollection(), crs = sf::st_crs(pcrown))
 
-  trees$TreeFound = NULL
-  trees$ApexFound = NULL
+  #trees$TreeFound = NULL
+  #trees$ApexFound = NULL
   pcrown$ApexFound = NULL
 
-  order <- c( "Block", "Tpos", "Prow", "Pcol", "Height", "CrownArea", "geometry")
+  order <- c( "Block", "Tpos", "Prow", "Pcol", "ApexFound", "TreeFound", "Height", "CrownArea", "geometry")
   trees = trees[, order]
+  order <- c( "Block", "Tpos", "Prow", "Pcol", "Height", "CrownArea", "geometry")
   pcrown = pcrown[, order]
 
   prog$tick(3, "Done")

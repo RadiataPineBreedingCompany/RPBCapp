@@ -1,7 +1,9 @@
 #' @export
-layout_alignment_angle = function(layout, chm, pivot, ws)
+layout_alignment_angle = function(layout, chm, pivot, ws, boundaries)
 {
   ttps = lidR::locate_trees(chm, lidR::lmf(ws))
+  u = sf::st_contains(boundaries, ttps)
+  ttps = ttps[u[[1]],]
 
   #terra::plot(self$schm)
   #plot(ttps, add = T, cex = 0.25)
@@ -40,5 +42,46 @@ layout_alignment_angle = function(layout, chm, pivot, ws)
   }
 
   res <- optimize(f = rms_distance_nn, interval = c(-180, 180), A = umov, B = vref, p = pivot)
-  return(res$minimum)
+  cat('rms = ', res$objective, "\n")
+
+  angle = res$minimum
+
+  loss <- function(params, A, B, pivot, angle)
+  {
+    angle_rad = angle * pi / 180
+    tx <- params[1]
+    ty <- params[2]
+
+    # Center both sets at pivot
+    A0 <- sweep(A, 2, pivot)
+    B0 <- sweep(B, 2, pivot)
+
+    # rotation
+    R <- matrix(c(cos(angle_rad), -sin(angle_rad),
+                  sin(angle_rad),  cos(angle_rad)), 2, 2)
+
+    # apply rotation then translation
+    rotated <- t(R %*% t(A0))
+    transformed <- rotated + matrix(c(tx, ty), nrow(A), 2, byrow = TRUE)
+
+    if (FALSE)
+    {
+      plot(B0, asp = 1)
+      points(rotated, col = "blue")
+      points(transformed, col ="red")
+    }
+
+    nn <- RANN::nn2(data = B0, query = transformed, k = 1)
+    rms = sqrt(mean(nn$nn.dists^2))  # RMS
+    rms
+  }
+
+  # Adjust in translation
+  init = c(0,0)
+  fit <- nlm(loss, p = init, A = umov, B = vref, pivot = pivot, angle = -angle)
+
+  cat("rms =", fit$minimum, "\n")
+
+  res = c(angle, fit$estimate)
+  return(res)
 }

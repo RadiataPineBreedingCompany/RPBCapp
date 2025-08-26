@@ -24,7 +24,7 @@ RPBCLayout <- R6::R6Class("Plantation",
     {
       sheets <- readxl::excel_sheets(file)
       if (!sheet_name %in% sheets)
-        stop(paste("Sheet", sheet_name, "does not exist in the file"))
+        stop(paste("Sheet", sheet_name, "does not exist in the Excel file"))
 
       self$block_layout_table = readxl::read_excel(file, sheet = sheet_name)
     },
