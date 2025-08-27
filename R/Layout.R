@@ -6,7 +6,6 @@ RPBCLayout <- R6::R6Class("Plantation",
     tree_layout_raw = NULL,
     block_layout = NULL,
     tree_layout = NULL,
-    tree_layout_adjusted = NULL,
     crs = NULL,
     origin = c(0,0),
     angle = 0,
@@ -43,7 +42,6 @@ RPBCLayout <- R6::R6Class("Plantation",
       self$tree_layout_raw = generate_trees(self$block_layout_raw , block_size, num_trees, start = start, orientation = orientation)
       self$block_layout = self$block_layout_raw
       self$tree_layout = self$tree_layout_raw
-      self$tree_layout_adjusted = self$tree_layout
     },
 
     set_crs = function(crs)
@@ -54,7 +52,6 @@ RPBCLayout <- R6::R6Class("Plantation",
         sf::st_crs(self$tree_layout_raw) = crs
         sf::st_crs(self$block_layout) = crs
         sf::st_crs(self$tree_layout) = crs
-        sf::st_crs(self$tree_layout_adjusted) = crs
       }
     },
 
@@ -85,7 +82,6 @@ RPBCLayout <- R6::R6Class("Plantation",
       shift = sf::st_sfc(sf::st_point(translate))
       self$block_layout = sf::st_set_geometry(self$block_layout, sf::st_geometry(self$block_layout) + shift)
       self$tree_layout = sf::st_set_geometry(self$tree_layout,  sf::st_geometry(self$tree_layout) + shift)
-      self$tree_layout_adjusted = self$tree_layout
 
       self$set_crs(crs)
       #plot(self$tree_layout_raw$geometry, col = "red", axes = T)
@@ -103,7 +99,7 @@ RPBCLayout <- R6::R6Class("Plantation",
       lines = do.call(c, lines_list)
       plot(lines, add = T, col = "gray")
 
-      plot(self$tree_layout, add = T, pch = 19, cex = 0.25)
+      plot(self$tree_layout["Tpos"], add = T, pch = 19, cex = 0.25)
     }
   )
 )
@@ -151,6 +147,7 @@ generate_blocks <- function(block_layout, block_size)
 #' @export
 generate_trees = function(block_layout, block_size, num_trees, start, orientation)
 {
+  sf::st_agr(block_layout) = "constant"
   block_centers = sf::st_centroid(block_layout)
   block_centers = sf::st_coordinates(block_centers)
   tree_layout = lapply(1:nrow(block_centers), function(i)

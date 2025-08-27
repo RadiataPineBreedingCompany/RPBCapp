@@ -38,6 +38,7 @@ Collate:
     'Layout.R'
     'Plantation.R'
     'alignment.R'
+    'app.R'
     'process_lidar.R'
     'progress.R'
     'segmentation.R'

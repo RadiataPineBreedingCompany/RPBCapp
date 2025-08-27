@@ -1,17 +1,7 @@
 library(shiny)
-library(bslib)
 library(RPBCapp)
 
-tooltiped <- function(text, tooltip_text)
-{
-  tags$p(
-    text, " ",
-    bslib::tooltip(
-      bsicons::bs_icon("info-circle"),
-      tooltip_text
-    )
-  )
-}
+cat("Loading Server...\n")
 
 popup_error = function(msg)
 {
@@ -31,298 +21,6 @@ popup_error = function(msg)
   )
 }
 
-link_shiny <- tags$a(
-  shiny::icon("github"), "Shiny",
-  href = "https://github.com/rstudio/shiny",
-  target = "_blank"
-)
-link_posit <- tags$a(
-  shiny::icon("r-project"), "Posit",
-  href = "https://posit.co",
-  target = "_blank"
-)
-
-# ---- UI ----
-
-addResourcePath("www", system.file("shiny_app/www/", package = "RPBCapp"))
-
-ui <- page_navbar(
-  title = tagList(
-    tags$img(src = "www/logo.png", height = "50px"),
-  ),
-  theme = bs_theme(version = 5, , bootswatch = "flatly"),
-  navbar_options = navbar_options(bg = "#0062cc", underline = TRUE),
-
-  # ---- nav 1 project ----
-  nav_panel(
-    title = "1. Project",
-    layout_columns(
-      col_widths = c(4, 8), # two equal columns for cards
-      card(
-        full_screen = FALSE,
-        card_header("New project"),
-        card_body(
-          tooltiped("1. Create a project", "To work the application needs an initialized project. "),
-          shinyFiles::shinySaveButton(
-            'createProjectButton', 'Create a project', 'Create a RPBC project as...',
-            filetype = "rpbc",
-            viewtype = "icon",
-            icon = bsicons::bs_icon("cast")
-          ),
-          tooltiped("2. Select a point cloud or a canopy height model. ", "The application can work with a Canopy Height Model only. The point cloud is not mandatory. The point cloud can be used to build the CHM."),
-          fluidRow(
-            column(
-              width = 5,
-              shinyFiles::shinyFilesButton(
-                'loadLasFileButton', 'Select point cloud file', 'Please select a point cloud',
-                FALSE,
-                viewtype = "icon",
-                icon = icon("cloud"),
-                class = "w-100"
-              )
-            ),
-            column(
-              width = 2,
-              div(style = "text-align: center; line-height: 38px;", strong("or"))
-            ),
-            column(
-              width = 5,
-              shinyFiles::shinyFilesButton(
-                'loadCHMFileButton', 'Select CHM file', 'Please select a config file',
-                FALSE,
-                viewtype = "icon",
-                icon = bsicons::bs_icon("grid-3x3"),
-                class = "w-100"
-              )
-            )
-          ),
-          tags$br(),
-          tooltiped("3. Select a boundary file ", "A geospatial file containing plantation boundaries."),
-          shinyFiles::shinyFilesButton(
-            'loadBoundaryFileButton', 'Select geospatial file', 'Please select a geospatial file',
-            FALSE,
-            viewtype = "icon",
-            icon = bsicons::bs_icon("bounding-box")),
-          tags$br(),
-          tooltiped("4. Select a database file ", "Select an Excel file containing the plantation database."),
-          shinyFiles::shinyFilesButton(
-            'loadBlockPatternFileButton', 'Select Excel file', 'Please select an Excel file',
-            FALSE,
-            viewtype = "icon",
-            icon = icon("table")),
-        )
-      ),
-      card(
-        full_screen = TRUE,
-        card_header("Map preview"),
-        div(
-          style = "width: 100%; height: 100%;",
-          leaflet::leafletOutput("mapPreview",width = "100%", height = "100%")
-        )
-      ),
-
-      card(
-        full_screen = FALSE,
-        card_header("Existing project"),
-        card_body(
-          tooltiped("Select an ‘.rpcb’ config file",  "The file will be read and the previous configuration restored."),
-          shinyFiles::shinyFilesButton('loadConfigFileButton', 'Select config file', 'Please select a config file', FALSE, icon = icon("gear")),
-        )
-      ),
-
-      layout_columns(
-        col_widths = c(8,4),
-        card(
-          full_screen = TRUE,
-          card_header("Project Data"),
-          card_body(
-            DT::DTOutput("fileTable")
-          )
-        ),
-        card(
-          full_screen = TRUE,
-          card_header("Project state"),
-          card_body(
-            DT::DTOutput("stateTable")
-          )
-        ),
-      )
-    )
-  ),
-
-  # ---- nav 2 point cloud ----
-  nav_panel(
-    title = "2. Point cloud",
-    layout_sidebar(
-      title = "Sidebar 2",
-      sidebar = sidebar(width = 300,
-        wellPanel(
-          tags$p(tags$strong("Ground Filtering")),
-          sliderInput("rigidness", "Rigidness", min = 1, max = 3, value = 2, step = 1),
-          sliderInput("cloth_resolution", "Cloth resolution", min = 0.1, max = 2, value = 0.5, step = 0.1)
-        ),
-        wellPanel(
-          tooltiped(tags$strong("CHM Parameters"), "Using the default parameters is recommanded"),
-          sliderInput("res", "CHM resolution (m)", min = 0.02, max = 1, value = 0.1, step = 0.01)
-        ),
-        actionButton("processPointCloudButton", "Process")
-      ),
-      div(
-        style = "width: 100%; height: 100%;",
-        rgl::rglwidgetOutput("rglplot3d",width = "100%", height = "100%")
-      )
-    )
-  ),
-
-  # ---- nav 3 chm ----
-  nav_panel(
-    title = "3. CHM",
-    layout_sidebar(
-      title = "Sidebar 3",
-      sidebar = sidebar(width = 300,
-        wellPanel(
-          tags$p(tags$strong("CHM smoothing")),
-          sliderInput("smoothCHM", "CHM smoothing (m)", min = 0, max = 5, value = 2, step = 0.25),
-          sliderInput("smoothPasses", "Smoothing passes", min = 0, max = 5, value = 2, step = 1),
-          actionButton("smoothCHMButton", "Smooth")
-        ),
-      ),
-      div(
-        style = "width: 100%; height: 100%;",
-        leaflet::leafletOutput("mapCHM", width = "100%", height = "100%")
-      )
-    ),
-  ),
-
-  # ---- nav 4 layout ----
-  nav_panel(
-    title = "4. Tree layout",
-    layout_sidebar(
-      title = "Sidebar 3",
-      sidebar = sidebar(width = 300,
-        wellPanel(
-          tags$p(tags$strong("Tree planting pattern")),
-          numericInput("blockSizeInput", "Block size", value = 18.6, min = 5, max = 50, step = 0.1),
-          numericInput("treeNumberInput", "Number of Trees", value = 6, min = 2, max = 12, step = 1),
-
-          radioButtons(
-            "partternStartChoiceRadioButton", "Select the start point:",
-            choices = c("Bottom-left" = "bl",
-                        "Bottom-right" = "br",
-                        "Top-left" = 'tl',
-                        "Top right" = "tr"),
-            selected = "bl",
-            inline = TRUE
-          ),
-
-          radioButtons(
-            "partternOrientationChoiceRadioButton", "Select an orientation:",
-            choices = c("Vertical" = "v",
-                        "Horizontal" = "h"),
-            selected = "v",
-            inline = TRUE
-          ),
-        ),
-        imageOutput("selectedPatternImage")
-      ),
-      div(
-        style = "width: 100%; height: 100%;",
-        imageOutput("plantationLayoutImage",width = "100%", height = "100%")
-      )
-    )
-  ),
-
-  # ---- nav 5 alignment ----
-  nav_panel(
-    title = "5. Layout alignment",
-    layout_sidebar(
-      title = "Sidebar 5",
-
-      sidebar = sidebar(width = 300,
-        wellPanel(
-          tags$p(tags$strong("Tree map")),
-          tags$p("If an accurate map of the tree is available load it. Otherwise the map will be generated from the block layout built in step 3."),
-          shinyFiles::shinyFilesButton('loadTreeMapFileButton', 'Select file', 'Please select an geospatiale file', FALSE, icon = icon("table")),
-        ),
-        wellPanel(
-          tags$p(tags$strong("Tree Zero")),
-          tooltiped("Using the CHM, click on the tree zero", "This tree will be use as pivot point to align the tree layout map real trees"),
-          uiOutput("clickTreeZeroInfo")
-        ),
-        wellPanel(
-          tags$p(tags$strong("Run alignment")),
-          tooltiped("Run automatic alignment.", "Once the pivot point has been choosen accurately, this button trigger an alignment with real trees"),
-          actionButton("alignLayoutButton", "Align trees")
-        ),
-        wellPanel(
-          tags$p(tags$strong("Run adjustment")),
-          tooltiped("Run automatic adjustment", "The layout pattern is not 100% accurate. This step starts from the tree plantation layout and retrieve the real positions of the trees"),
-          sliderInput("hminAdjustTreesSlider", "Minimal height", min = 0, max = 10, value = 2, step = 0.25),
-          actionButton("adjustLayoutButton", "Adjust trees")
-        )
-      ),
-      div(
-        style = "width: 100%; height: 100%;",
-        leaflet::leafletOutput("mapTreeLayout",width = "100%", height = "100%")
-      ),
-    )
-  ),
-
-  # ---- nav 6 alignment ----
-  nav_panel(
-    title = "6. Measurement",
-    layout_sidebar(
-      title = "Sidebar 6",
-      sidebar = sidebar(width = 300,
-        wellPanel(
-          tags$p("Once the trees are detected run tree measurement"),
-          sliderInput("hminMeasureTreesSlider", "Minimal height", min = 0, max = 10, value = 2, step = 0.25),
-          actionButton("runMeasurementButton", "Measure trees")
-        )
-      ),
-      div(
-        style = "width: 100%; height: 100%;",
-        leaflet::leafletOutput("mapTrees",width = "100%", height = "100%")
-      )
-    )
-  ),
-
-  # ---- nav 7 statistics ----
-  nav_panel(
-    title = "7. Statistics",
-
-    layout_column_wrap(
-      width = 1/3,  # three boxes in one row
-      uiOutput("vb_found"),
-      uiOutput("vb_missing"),
-      uiOutput("vb_non_measured")
-    ),
-
-    # cards with ggplots
-    layout_column_wrap(
-      width = 1/3,  # 2 cards per row
-      !!!lapply(1:6, function(i) {
-        card(
-          full_screen = TRUE,
-          card_header(paste("Plot", i)),
-          card_body(
-            plotOutput(paste0("ggplot", i))
-          )
-        )
-      })
-    )
-  ),
-
-  nav_spacer(),
-
-  nav_menu(
-    title = "Links",
-    align = "right",
-    nav_item(link_shiny),
-    nav_item(link_posit)
-  )
-)
-
 server <- function(input, output, session)
 {
   plantation = Plantation$new()
@@ -336,7 +34,11 @@ server <- function(input, output, session)
   update_state_table <- reactiveVal(0)
   update_stats_ui    <- reactiveVal(0)
   update_rgl_view    <- reactiveVal(0)
+  update_ggplots     <- reactiveVal(0)
   saveProject        <- reactiveVal(0)
+
+  output$estimatedDensityValue = renderText(NA)
+  output$recommandedFractionValue = renderText(NA)
 
   volumes <- c(RPBC = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/",
                Home = fs::path_home(),
@@ -404,10 +106,20 @@ server <- function(input, output, session)
           updateRadioButtons(session, "partternOrientationChoiceRadioButton", selected = plantation$layout$orientation)
         }
 
-        if (!is.null(plantation$schm))
+        updateSliderInput(session, "smoothCHM", value = plantation$params$smoothCHM)
+        updateSliderInput(session, "smoothPasses", value = plantation$params$smoothPasses)
+        updateSliderInput(session, "hminAdjustTreesSlider", value = plantation$params$treeHmin)
+        updateSliderInput(session, "hminMeasureTreesSlider", value = plantation$params$crownHmin)
+        updateSliderInput(session, "keepRandomFraction", value = plantation$params$keepRandomFraction)
+
+        if (!is.null(plantation$flas))
         {
-          updateSliderInput(session, "smoothCHM", value = plantation$params$smoothCHM)
-          updateSliderInput(session, "smoothPasses", value = plantation$params$smoothPasses)
+          header = lidR::readLASheader(plantation$flas)
+          d = round(lidR::density(header),1)
+          f = round((200/d)/0.05)*0.05
+          if (f > 1) f = 1
+          output$estimatedDensityValue = renderText(d)
+          output$recommandedFractionValue = renderText(f)
         }
 
         update_file_table(runif(1))
@@ -418,6 +130,7 @@ server <- function(input, output, session)
         update_rgl_view(runif(1))
         update_preview_map(runif(1))
         update_stats_ui(runif(1))
+        update_ggplots(runif(1))
       },
       error = function(e)
       {
@@ -573,6 +286,7 @@ server <- function(input, output, session)
       update_tree_map(runif(1))
       update_state_table(runif(1))
       update_stats_ui(runif(1))
+      update_ggplots(runif(1))
     },
     error = function(e)
     {
@@ -587,6 +301,47 @@ server <- function(input, output, session)
     {
       tryCatch({
         plantation$set_cloud(path)
+
+        if (plantation$crs == sf::NA_crs_ | is.null(plantation$crs))
+        {
+          showModal(modalDialog(
+            title =  tagList(
+              tags$span(
+                icon("exclamation-triangle", lib = "font-awesome"),
+                "No CRS recorded in the point cloud",
+                style = "color: red;"
+              )
+            ),
+            selectInput(
+              "choose_crs",
+              "Choose CRS:",
+              choices = c(
+                "NZGD2000 / New Zealand Transverse Mercator 2000 (EPSG:2193)" = "EPSG:2193",
+                "NZGD49 / New Zealand Map Grid (NZMG) (EPSG:27200)" = "EPSG:27200",
+                "GDA2020 / MGA Zone 54 (EPSG:7854)" = "EPSG:7854",
+                "GDA2020 / MGA Zone 55 (EPSG:7855)" = "EPSG:7855",
+                "GDA2020 / MGA Zone 56 (EPSG:7856)" = "EPSG:7856"
+              ),
+              width = "100%"
+            ),
+            footer = tagList(
+              modalButton("Cancel"),
+              actionButton("confirm_crs", "OK")
+            )
+          ))
+        }
+
+        if (!is.null(plantation$flas))
+        {
+          header = lidR::readLASheader(plantation$flas)
+          d = round(lidR::density(header),1)
+          f = round((200/d)/0.05)*0.05
+          if (f > 1) f = 1
+          output$estimatedDensityValue = renderText(d)
+          output$recommandedFractionValue = renderText(f)
+          updateSliderInput(session, "keepRandomFraction", value = f)
+        }
+
         update_preview_map(runif(1))
         update_file_table(runif(1))
       },
@@ -615,6 +370,7 @@ server <- function(input, output, session)
         }
 
         plantation$process_pointcloud(
+          input$keepRandomFraction,
           input$rigidness,
           cloth_resolution = input$cloth_resolution,
           smoothCHM = input$smoothCHM,
@@ -676,6 +432,7 @@ server <- function(input, output, session)
     }
   )
 
+  # ===== OnEvent save ====
   observe({
     val <- saveProject()
     if (val != 0)
@@ -688,6 +445,43 @@ server <- function(input, output, session)
       })
     }
   })
+
+  # ===== OnEvent ggplot ====
+  observe({
+    update_ggplots()
+
+    print("Update ggplots")
+
+    tryCatch({
+      gglist = plantation$get_ggstats()
+
+      for (i in 1:6)
+      {
+        local({
+          j <- i
+          output[[paste0("ggplot", j)]] <- renderPlot({
+            if (j <= length(gglist)) {
+              gglist[[j]]
+            } else {
+              # return blank if not enough plots
+              ggplot2::ggplot() + ggplot2::theme_void()
+            }
+          })
+        })
+      }
+    },
+    error = function(e) {
+      popup_error(conditionMessage(e))
+    })
+  })
+
+  observeEvent(input$confirm_crs, {
+    req(input$choose_crs)
+    plantation$set_crs(sf::st_crs(input$choose_crs))
+    removeModal()
+    update_preview_map(runif(1))
+  })
+
 
   # ===== OnClick tree Zero =====
   output$clickTreeZeroInfo <- renderUI({
@@ -806,9 +600,14 @@ server <- function(input, output, session)
     update_stats_ui()
 
     # Measured
-    N = nrow(plantation$trees)
-    n = sum(plantation$trees$ApexFound)
-    p = round(n/N*100,1)
+    n = NA
+    p = NA
+    if (!is.null(plantation$trees))
+    {
+      N = nrow(plantation$trees)
+      n = sum(plantation$trees$ApexFound)
+      p = round(n/N*100,1)
+    }
 
     value_box(
       title = "Trees Found",
@@ -820,10 +619,15 @@ server <- function(input, output, session)
   output$vb_missing <- renderUI({
     update_stats_ui()
 
-    N = nrow(trees)
-    n = sum(plantation$trees$ApexFound | plantation$trees$TreeFound)
-    p = round((N-n)/N*100,1)
-
+    N = NA
+    n = NA
+    p = NA
+    if (!is.null(plantation$trees))
+    {
+      N = nrow(plantation$trees)
+      n = sum(plantation$trees$ApexFound | plantation$trees$TreeFound)
+      p = round((N-n)/N*100,1)
+    }
     value_box(
       title = "Missing Trees",
       value = paste0((N-n), " (", p, "%)"),
@@ -834,9 +638,14 @@ server <- function(input, output, session)
   output$vb_non_measured <- renderUI({
     update_stats_ui()
 
-    N = nrow(plantation$trees)
-    n = sum(!plantation$trees$ApexFound & plantation$trees$TreeFound)
-    p = round(n/N*100,1)
+    n = NA
+    p = NA
+    if (!is.null(plantation$trees))
+    {
+      N = nrow(plantation$trees)
+      n = sum(!plantation$trees$ApexFound & plantation$trees$TreeFound)
+      p = round(n/N*100,1)
+    }
 
     value_box(
       title = "Non-measured Trees",
@@ -845,5 +654,3 @@ server <- function(input, output, session)
     )
   })
 }
-
-shinyApp(ui, server)

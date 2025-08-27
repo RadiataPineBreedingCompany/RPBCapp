@@ -159,16 +159,10 @@ N = nrow(trees)
 n = sum(!trees$ApexFound & trees$TreeFound)
 p = round(n/N*100,1)
 
-database = readxl::read_excel(self$fdatabase, sheet = "Sorted Linear File")
-
-spatial_db = database
-names(spatial_db)[names(spatial_db) == "Pset(Block)"] <- "Block"
-spatial_db = merge(database, trees, by = c("Tpos", "Block", "Prow", "Pcol"), all.x = TRUE)
-
 library(ggplot2)
 
 # Height vs Block
-p1 = ggplot(spatial_db, aes(x = as.factor(Block), y = Height, fill = as.factor(Block))) +
+p1 = ggplot(self$trees, aes(x = as.factor(Block), y = Height, fill = as.factor(Block))) +
   geom_boxplot(outlier.shape = NA, alpha = 0.7) +
   theme_bw() +
   guides(fill = "none") +

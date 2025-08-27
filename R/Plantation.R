@@ -39,14 +39,51 @@ Plantation <- R6::R6Class("Plantation",
 
     set_crs = function(x, nowrite = FALSE)
     {
-      if (is.null(self$crs))
-        self$crs = sf::st_crs(x)
+      if (x == sf::NA_crs_) return()
+
+      self$crs = sf::st_crs(x)
 
       if (!is.null(self$boundaries))
         self$boundaries = sf::st_transform(self$boundaries, self$crs)
 
       if (!is.null(self$layout))
-        self$layout$set_crs(x)
+        self$layout$set_crs(self$crs)
+
+      if (!is.null(self$chm))
+      {
+        terra::crs(self$chm) = self$crs$wkt
+        self$chm = terra::toMemory(self$chm)
+        terra::writeRaster(self$chm, self$fchm, overwrite = TRUE)
+        self$chm = terra::rast(self$fchm)
+      }
+
+      if (!is.null(self$schm))
+      {
+        terra::crs(self$schm) = self$crs$wkt
+        self$schm = terra::toMemory(self$schm)
+        terra::writeRaster(self$schm, self$fschm, overwrite = TRUE)
+        self$schm = terra::rast(self$fschm)
+      }
+
+      if (!is.null(self$dtm))
+      {
+        terra::crs(self$dtm) = self$crs$wkt
+        self$dtm = terra::toMemory(self$dtm)
+        terra::writeRaster(self$dtm, self$fdtm, overwrite = TRUE)
+        self$dtm = terra::rast(self$fdtm)
+      }
+
+      if (!is.null(self$las))
+        sf::st_crs(self$las) = self$crs
+
+      if (!is.null(self$bbox))
+        sf::st_crs(self$bbox) = self$crs
+
+      if (!is.null(self$trees))
+        sf::st_crs(self$trees) = self$crs
+
+      if (!is.null(self$crowns))
+        sf::st_crs(self$crowns) = self$crs
 
       if (!nowrite)
         self$write_config()
@@ -80,7 +117,6 @@ Plantation <- R6::R6Class("Plantation",
 
     set_boundaries = function(file, nowrite = FALSE)
     {
-      print(file)
       assert_file_exists(file)
 
       boundaries = sf::st_read(file, quiet = TRUE)
@@ -212,13 +248,13 @@ Plantation <- R6::R6Class("Plantation",
         self$write_config()
     },
 
-    process_pointcloud = function(rigidness = 2, cloth_resolution = 0.5, smoothCHM = 2, smoothPasses = 2, res = 0.1, progress = NULL)
+    process_pointcloud = function(read_fraction = 1, rigidness = 2, cloth_resolution = 0.5, smoothCHM = 2, smoothPasses = 2, res = 0.1, progress = NULL)
     {
       prog <- make_progress(progress, 7)
       on.exit(prog$finalize(), add = TRUE)
 
       prog$tick(1, detail = "Reading points cloud...")
-      self$read_cloud()
+      self$read_cloud(read_fraction)
 
       prog$tick(2,  detail = "Classifying ground points...")
       self$classify_ground(rigidness = rigidness, cloth_resolution = cloth_resolution)
@@ -255,8 +291,14 @@ Plantation <- R6::R6Class("Plantation",
       echm[is.na(echm)] = 0
       trees = relocate_trees(chm, echm, plan, spacing, hmin, progress)
       self$layout_warnings = validate_tree(trees, plan, spacing, hmin)
-      self$layout$tree_layout_adjusted = trees
+      self$trees = trees
 
+      if (is.null(self$fmeasurements))
+        self$fmeasurements = paste0(self$wd,  "/tree_measurements.gpkg")
+
+      sf::st_write(self$trees, dsn = self$fmeasurements, layer = "trees", quiet = TRUE, append = FALSE)
+
+      self$params$treesHmin = hmin
       self$write_config()
     },
 
@@ -264,7 +306,7 @@ Plantation <- R6::R6Class("Plantation",
     {
       if (is.null(self$chm)) stop("CHM is NULL")
       if (is.null(self$schm)) stop("Smooth CHM is NULL")
-      if (is.null(self$layout$tree_layout_adjusted)) stop("Tree layout is NULL")
+      if (is.null(self$trees)) stop("Tree layout is NULL")
       if (is.null(self$layout$spacing)) stop("Spacing is NULL")
       if (is.null(hmin)) stop("hmin is NULL")
       if (!is.numeric(hmin) || length(hmin) != 1 || hmin <= 0)
@@ -273,7 +315,7 @@ Plantation <- R6::R6Class("Plantation",
       chm = self$chm
       echm = self$schm
       echm[is.na(echm)] = 0
-      trees = self$layout$tree_layout_adjusted
+      trees = self$trees
       spacing = self$layout$spacing
 
       ans <- measure_trees(trees, chm, echm, spacing, hmin, use_dalponte = !watershed, progress = progress)
@@ -284,9 +326,13 @@ Plantation <- R6::R6Class("Plantation",
       if (is.null(self$fmeasurements))
         self$fmeasurements = paste0(self$wd,  "/tree_measurements.gpkg")
 
+      self$joint_database()
+
       sf::st_write(self$trees, dsn = self$fmeasurements, layer = "trees", quiet = TRUE, append = FALSE)
       sf::st_write(self$crowns, dsn = self$fmeasurements, layer = "crowns", quiet = TRUE, append = FALSE)
 
+      self$params$crownsHmin = hmin
+      self$params$crownsWatershed = watershed
       self$write_config()
     },
 
@@ -382,14 +428,129 @@ Plantation <- R6::R6Class("Plantation",
       )
     },
 
-    read_cloud = function()
+    get_ggstats = function()
+    {
+      if (is.null(self$trees))
+        return(list())
+
+      void = ggplot2::ggplot() + ggplot2::theme_void()
+      out = vector("list", 6)
+      out[[1]] = void
+      out[[2]] = void
+      out[[3]] = void
+      out[[4]] = void
+      out[[5]] = void
+      out[[6]] = void
+
+      trees = self$trees
+
+      out[[1]] = ggplot2::ggplot(trees) +
+        ggplot2::aes(x = Height) +
+        ggplot2::geom_histogram(binwidth = 0.5, fill = "skyblue", color = "black") +
+        ggplot2::geom_vline(
+          xintercept = mean(trees$Height, na.rm = TRUE),
+          color = "red",
+          linetype = "dashed",
+          size = 1
+        ) +
+        ggplot2::labs(
+          title = "Height Distribution",
+          x = "Height",
+          y = "Count"
+        ) +
+        ggplot2::theme_bw()
+
+
+      out[[2]] = ggplot2::ggplot(trees) +
+        ggplot2::aes(x = CrownArea) +
+        ggplot2::geom_histogram(binwidth = 0.5, fill = "darkgoldenrod2", color = "black") +
+        ggplot2::geom_vline(
+          xintercept = mean(trees$CrownArea, na.rm = TRUE),
+          color = "red",
+          linetype = "dashed",
+          size = 1
+        ) +
+        ggplot2::labs(
+          title = "Crown Area Distribution",
+          x = "Area (m²)",
+          y = "Count"
+        ) +
+        ggplot2::theme_bw()
+
+      out[[3]] = ggplot2::ggplot(trees) +
+        ggplot2::aes(x = as.factor(Block), y = Height, fill = as.factor(Block)) +
+        ggplot2::geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+        ggplot2::theme_bw() +
+        ggplot2::guides(fill = "none") +
+        ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)) +
+        ggplot2::scale_x_discrete(
+          breaks = levels(as.factor(trees$Block))[seq(1, length(unique(trees$Block)), 5)]
+        ) +
+        ggplot2::labs(
+          title = "Height Distribution by Block",
+          x = "Block",
+          y = "Height (m)",
+          fill = "Block"
+        )
+
+      if (!is.null(trees$CloneCode))
+      {
+        # Height vs CloneCode
+        out[[4]] =  ggplot2::ggplot(trees) +
+          ggplot2::aes(x = as.factor(CloneCode), y = Height, fill = as.factor(CloneCode), col = as.factor(CloneCode)) +
+          ggplot2::geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+          ggplot2::theme_bw() +
+          ggplot2::guides(fill = "none", col = "none") +
+          ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)) +
+          ggplot2::labs(
+            title = "Height Distribution by Clone Code",
+            x = "Clone Code",
+            y = "Height (m)",
+            fill = "Clone Code"
+          )
+      }
+
+      if (!is.null(trees$FamilyCode))
+      {
+        # Height vs FamilyCode
+        out[[5]] = ggplot2::ggplot(trees) +
+          ggplot2::aes(x = as.factor(FamilyCode), y = Height, fill = as.factor(FamilyCode)) +
+          ggplot2::geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+          ggplot2::theme_bw() +
+          ggplot2::guides(fill = "none")+
+          ggplot2::scale_x_discrete(
+            breaks = levels(as.factor(trees$FamilyCode))[seq(1, length(unique(trees$FamilyCode)), 5)]
+          ) +
+          ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)) +
+          ggplot2::labs(
+            title = "Height Distribution by Family Code",
+            x = "Family Code",
+            y = "Height (m)",
+            fill = "Family Code"
+          )
+      }
+
+      out
+    },
+
+    read_cloud = function(fraction = 1)
     {
       if (is.null(self$flas))
         stop("No file point cloud file registered. Select a file first")
 
       assert_file_exists(self$flas)
 
-      self$las = lidR::readLAS(self$flas, select = "xyzc")
+      if (fraction < 0) stop("Fraction cannot be negative")
+      filter = ""
+      if (fraction  < 1)
+        filter = paste("-keep_random_fraction", fraction)
+
+      self$las = lidR::readLAS(self$flas, select = "xyzc", filter = filter)
+
+      if (sf::st_crs(self$las) == sf::NA_crs_)
+        self$set_crs(self$crs, nowrite = TRUE)
+
+      self$params$keepRandomFraction = fraction
     },
 
     classify_ground = function(rigidness = 2, cloth_resolution = 0.5)
@@ -437,6 +598,9 @@ Plantation <- R6::R6Class("Plantation",
       dtm <- terra::resample(dtm, chm, method = "bilinear")  # or "near" if categorical
       chm = chm - dtm
 
+      print(self$las)
+      print(chm)
+
       # Save on disk
       if (!is.null(self$wd))
       {
@@ -446,6 +610,17 @@ Plantation <- R6::R6Class("Plantation",
       }
 
       self$write_config()
+    },
+
+    joint_database = function()
+    {
+      if (!is.null(self$trees))
+      {
+        db = readxl::read_excel(self$fdatabase, sheet = "Sorted Linear File")
+        names(db)[names(db) == "Pset(Block)"] <- "Block"
+        self$trees = merge(db, self$trees, by = c("Tpos", "Block", "Prow", "Pcol"), all.x = TRUE)
+        self$trees = sf::st_as_sf(self$trees)
+      }
     },
 
     smooth_chm = function(smooth = 2, passes = 2)
@@ -472,6 +647,8 @@ Plantation <- R6::R6Class("Plantation",
         self$schm = terra::rast(self$fschm)
       }
 
+      self$params$smoothCHM = smooth
+      self$params$smoothPasses = passes
       self$write_config()
     },
 
@@ -587,7 +764,7 @@ Plantation <- R6::R6Class("Plantation",
         reason = self$layout_warnings$warn$reason
         pal <- leaflet::colorFactor(palette = c('yellow', 'green'), domain = reason)
 
-        data = sf::st_transform(self$layout$tree_layout_adjusted, 4326)
+        data = sf::st_transform(self$trees, 4326)
         map = map |> leaflet::addPolygons(data = sf::st_transform(self$layout_warnings$warn, 4326), opacity = 0.9, group = "Warnings", color = ~pal(reason), fill = FALSE, weight = 3)
         overlayGroups = c(overlayGroups, "Warnings")
 
@@ -612,15 +789,20 @@ Plantation <- R6::R6Class("Plantation",
 
       if (!is.null(self$layout) & layout)
       {
-        data = sf::st_transform(self$layout$tree_layout_adjusted, 4326)
+        if (is.null(self$trees))
+          data = sf::st_transform(self$layout$tree_layout, 4326)
+        else
+          data = sf::st_transform(self$trees, 4326)
 
-        if (!is.null(data$TreeFound)) {
-          col = ifelse(data$TreeFound, "green", "red")
+        if (!is.null(data$ApexFound))
+        {
+          col = ifelse(data$ApexFound, "green", "red")
+          col = ifelse(data$TreeFound & !data$ApexFound, "orange", col)
 
-        map =  map |> leaflet::addLegend(
+          map =  map |> leaflet::addLegend(
             position = "bottomright",
-            colors = c("green", "red"),
-            labels = c("Tree found", "Tree not found"),
+            colors = c("green", "orange", "red"),
+            labels = c("Tree apex found", "Tree apex not found", "No tree"),
             title = "Tree status")
 
         } else {
@@ -764,9 +946,9 @@ Plantation <- R6::R6Class("Plantation",
         gnd = lidR::filter_ground(las)
         ngnd = lidR::filter_poi(las, Classification != lidR::LASGROUND)
         n = lidR::npoints(ngnd)
-        if (n > 1000000)
+        if (n > 100000)
         {
-          r = ceiling(n/1000000)
+          r = ceiling(n/100000)
           ngnd <- ngnd[seq(1, n, by = r)]
         }
         pal = lidR::height.colors(25)
@@ -808,7 +990,11 @@ Plantation <- R6::R6Class("Plantation",
       self$fconfig = file
 
       config = jsonlite::read_json(file)
-      if (!is.null(config$point_cloud)) self$set_cloud(config$point_cloud$file, nowrite = TRUE)
+      if (!is.null(config$point_cloud))
+      {
+        self$set_cloud(config$point_cloud$file, nowrite = TRUE)
+        self$params$keepRandomFraction = config$point_cloud$fraction
+      }
       if (!is.null(config$boundaries)) self$set_boundaries(config$boundaries$file, nowrite = TRUE)
       if (!is.null(config$dtm)) self$set_dtm(config$dtm$file, nowrite = TRUE)
       if (!is.null(config$chm)) self$set_chm(config$chm$file, nowrite = TRUE)
@@ -837,8 +1023,16 @@ Plantation <- R6::R6Class("Plantation",
         if (!is.null(config$layout$angle))
           self$layout$set_angle(config$layout$angle)
       }
-      if (!is.null(config$measurements)) self$set_measurements(config$measurements$file, nowrite = TRUE)
+      if (!is.null(config$measurements))
+      {
+        self$set_measurements(config$measurements$file, nowrite = TRUE)
+        self$params$smoothCHM = config$measurements$smoothCHM
+        self$params$smoothPasses = config$measurements$smoothPasses
+      }
       if (!is.null(config$database)) self$fdatabase = config$database$file
+
+      if (!is.null(config$crs))
+        self$set_crs(config$crs$wkt, nowrite = TRUE)
     },
 
     write_config = function()
@@ -847,7 +1041,11 @@ Plantation <- R6::R6Class("Plantation",
         stop("Impossible to save the project. No project file associated.")
 
       config = list()
-      config$point_cloud = list(file = self$flas)
+      config$format = list(signature = "RPBC", version = 1.0)
+      config$point_cloud = list(
+        file = self$flas,
+        fraction = self$params$keepRandomFraction
+      )
       config$boundaries = list(file = self$fboundaries)
       config$dtm = list(file = self$fdtm)
       config$chm = list(file = self$fchm)
@@ -866,7 +1064,9 @@ Plantation <- R6::R6Class("Plantation",
         origin = self$layout$origin
       )
       config$measurements = list(
-        file = self$fmeasurements
+        file = self$fmeasurements,
+        treeHmin = self$params$treeHmin,
+        crownHmin = self$params$crownHmin
       )
       config$database = list(
         file = self$fdatabase
@@ -893,11 +1093,11 @@ Plantation <- R6::R6Class("Plantation",
     state = function()
     {
       list(
-        chm = !is.null(self$chm),
-        schm = !is.null(self$schm),
-        layout = !is.null(self$layout),
-        trees = !is.null(self$trees),
-        crowns = !is.null(self$crowns)
+        CHM = !is.null(self$chm),
+        sCHM = !is.null(self$schm),
+        Layout = !is.null(self$layout),
+        Trees = !is.null(self$trees),
+        Crowns = !is.null(self$crowns)
       )
     }
   )
