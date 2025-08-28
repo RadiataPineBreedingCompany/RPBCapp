@@ -43,4 +43,5 @@ Collate:
     'progress.R'
     'segmentation.R'
     'snake.R'
+    'utils.R'
     'zzz.R'

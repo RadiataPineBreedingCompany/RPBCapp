@@ -12,11 +12,58 @@ popup_error = function(msg)
         span(icon("exclamation-triangle"), style = "color: #a94442; font-size: 24px; margin-right: 10px;"),
         span("Error", style = "color: #a94442; font-weight: bold; font-size: 20px;")
       ),
-      tags$div(msg,
-               style = "margin-top: 10px; color: #333;"),
+      tags$div(msg, style = "margin-top: 10px; color: #333;"),
       easyClose = TRUE,
       footer = modalButton("Dismiss"),
       size = "m"
+    )
+  )
+}
+
+selectCRSModalDialog = function()
+{
+  modalDialog(
+    title =  tagList(
+      tags$span(
+        icon("exclamation-triangle", lib = "font-awesome"),
+        "No CRS recorded in the point cloud",
+        style = "color: red;"
+      )
+    ),
+    selectInput(
+      "choose_crs",
+      "Choose CRS:",
+      choices = c(
+        # --- New Zealand ---
+        "NZGD2000 / New Zealand Transverse Mercator 2000 (EPSG:2193)" = "EPSG:2193",
+        "NZGD2000 / Chatham Islands Transverse Mercator 2000 (EPSG:3793)" = "EPSG:3793",
+        "NZGD49 / New Zealand Map Grid (NZMG) (EPSG:27200)" = "EPSG:27200",
+
+        # --- Australia (GDA2020 MGA Zones 49–56S) ---
+        "GDA2020 / MGA Zone 49 (EPSG:7859)" = "EPSG:7859",
+        "GDA2020 / MGA Zone 50 (EPSG:7860)" = "EPSG:7860",
+        "GDA2020 / MGA Zone 51 (EPSG:7861)" = "EPSG:7861",
+        "GDA2020 / MGA Zone 52 (EPSG:7862)" = "EPSG:7862",
+        "GDA2020 / MGA Zone 53 (EPSG:7863)" = "EPSG:7863",
+        "GDA2020 / MGA Zone 54 (EPSG:7864)" = "EPSG:7864",
+        "GDA2020 / MGA Zone 55 (EPSG:7865)" = "EPSG:7865",
+        "GDA2020 / MGA Zone 56 (EPSG:7866)" = "EPSG:7866",
+
+        # --- Australia (GDA94 MGA Zones 49–56S, still in use) ---
+        "GDA94 / MGA Zone 49 (EPSG:28349)" = "EPSG:28349",
+        "GDA94 / MGA Zone 50 (EPSG:28350)" = "EPSG:28350",
+        "GDA94 / MGA Zone 51 (EPSG:28351)" = "EPSG:28351",
+        "GDA94 / MGA Zone 52 (EPSG:28352)" = "EPSG:28352",
+        "GDA94 / MGA Zone 53 (EPSG:28353)" = "EPSG:28353",
+        "GDA94 / MGA Zone 54 (EPSG:28354)" = "EPSG:28354",
+        "GDA94 / MGA Zone 55 (EPSG:28355)" = "EPSG:28355",
+        "GDA94 / MGA Zone 56 (EPSG:28356)" = "EPSG:28356"
+      ),
+      width = "100%"
+    ),
+    footer = tagList(
+      modalButton("Cancel"),
+      actionButton("confirm_crs", "OK")
     )
   )
 }
@@ -139,6 +186,39 @@ server <- function(input, output, session)
     }
   }, ignoreInit = TRUE)
 
+  # ===== OnClick loadLasFileButton ====
+  observeEvent(input$loadLasFileButton, {
+    path <- shinyFiles::parseFilePaths(volumes, input$loadLasFileButton)$datapath
+    if (!is.null(path) && length(path) > 0)
+    {
+      tryCatch({
+        plantation$set_cloud(path)
+
+        # We set the point cloud. This should have set the CRS except if the LAS file has no CRS
+        if (plantation$crs == sf::NA_crs_ | is.null(plantation$crs))
+            showModal(selectCRSModalDialog())
+
+        if (!is.null(plantation$flas))
+        {
+          header = lidR::readLASheader(plantation$flas)
+          d = round(lidR::density(header),1)
+          f = round((200/d)/0.05)*0.05
+          if (f > 1) f = 1
+          output$estimatedDensityValue = renderText(d)
+          output$recommandedFractionValue = renderText(f)
+          updateSliderInput(session, "keepRandomFraction", value = f)
+        }
+
+        update_preview_map(runif(1))
+        update_file_table(runif(1))
+      },
+      error = function(e)
+      {
+        popup_error(conditionMessage(e))
+      })
+    }
+  }, ignoreInit = TRUE)
+
   # ===== OnClick loadBlockPatternFileButton ====
   observeEvent(input$loadBlockPatternFileButton, {
     file <- shinyFiles::parseFilePaths(volumes, input$loadBlockPatternFileButton)$datapath
@@ -228,7 +308,7 @@ server <- function(input, output, session)
 
     tryCatch({
       res = layout_alignment_angle(
-        plantation$layout$tree_layout,
+        plantation$layout$tree_layout_oriented,
         plantation$schm,
         plantation$layout$origin,
         plantation$layout$spacing*0.75,
@@ -292,64 +372,6 @@ server <- function(input, output, session)
     {
       popup_error(conditionMessage(e))
     })
-  }, ignoreInit = TRUE)
-
-  # ===== OnClick loadLasFileButton ====
-  observeEvent(input$loadLasFileButton, {
-    path <- shinyFiles::parseFilePaths(volumes, input$loadLasFileButton)$datapath
-    if (!is.null(path) && length(path) > 0)
-    {
-      tryCatch({
-        plantation$set_cloud(path)
-
-        if (plantation$crs == sf::NA_crs_ | is.null(plantation$crs))
-        {
-          showModal(modalDialog(
-            title =  tagList(
-              tags$span(
-                icon("exclamation-triangle", lib = "font-awesome"),
-                "No CRS recorded in the point cloud",
-                style = "color: red;"
-              )
-            ),
-            selectInput(
-              "choose_crs",
-              "Choose CRS:",
-              choices = c(
-                "NZGD2000 / New Zealand Transverse Mercator 2000 (EPSG:2193)" = "EPSG:2193",
-                "NZGD49 / New Zealand Map Grid (NZMG) (EPSG:27200)" = "EPSG:27200",
-                "GDA2020 / MGA Zone 54 (EPSG:7854)" = "EPSG:7854",
-                "GDA2020 / MGA Zone 55 (EPSG:7855)" = "EPSG:7855",
-                "GDA2020 / MGA Zone 56 (EPSG:7856)" = "EPSG:7856"
-              ),
-              width = "100%"
-            ),
-            footer = tagList(
-              modalButton("Cancel"),
-              actionButton("confirm_crs", "OK")
-            )
-          ))
-        }
-
-        if (!is.null(plantation$flas))
-        {
-          header = lidR::readLASheader(plantation$flas)
-          d = round(lidR::density(header),1)
-          f = round((200/d)/0.05)*0.05
-          if (f > 1) f = 1
-          output$estimatedDensityValue = renderText(d)
-          output$recommandedFractionValue = renderText(f)
-          updateSliderInput(session, "keepRandomFraction", value = f)
-        }
-
-        update_preview_map(runif(1))
-        update_file_table(runif(1))
-      },
-      error = function(e)
-      {
-        popup_error(conditionMessage(e))
-      })
-    }
   }, ignoreInit = TRUE)
 
   # observeEvent(input$map_draw_edited_features, {

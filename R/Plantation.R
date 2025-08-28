@@ -9,6 +9,7 @@ Plantation <- R6::R6Class("Plantation",
     flas = NULL,
     fdatabase = NULL,
     fboundaries = NULL,
+    fdebug = NULL,
     fdtm = NULL,
     fchm = NULL,
     fschm = NULL,
@@ -35,6 +36,8 @@ Plantation <- R6::R6Class("Plantation",
 
     initialize = function()
     {
+      fconfig = tempfile(fileext = ".rpbc")
+      self$create_config(fconfig)
     },
 
     set_crs = function(x, nowrite = FALSE)
@@ -276,27 +279,31 @@ Plantation <- R6::R6Class("Plantation",
 
     adjust_layout = function(hmin = 2, progress = NULL)
     {
-      if (is.null(self$chm)) stop("CHM is NULL")
-      if (is.null(self$schm)) stop("Smooth CHM is NULL")
-      if (is.null(self$layout$tree_layout)) stop("Tree layout is NULL")
-      if (is.null(self$layout$spacing)) stop("Spacing is NULL")
-      if (is.null(hmin)) stop("hmin is NULL")
-      if (!is.numeric(hmin) || length(hmin) != 1 || hmin <= 0)
-        stop("hmin must be a single positive numeric value")
+      if (is.null(self$chm)) stop("No CHM available")
+      if (is.null(self$schm)) stop("No smoothed CHM available")
+      if (is.null(self$layout$tree_layout_oriented)) stop("No tree layout available")
+      if (is.null(self$layout$spacing)) stop("No spacing available in tree layout")
+      if (is.null(hmin)) stop("No hmin argument")
+      if (!is.numeric(hmin) || length(hmin) != 1 || hmin <= 0) stop("hmin must be a single positive numeric value")
 
       chm = self$chm
       echm = self$schm
-      plan = self$layout$tree_layout
+      plan = self$layout$tree_layout_oriented
       spacing = self$layout$spacing
       echm[is.na(echm)] = 0
-      trees = relocate_trees(chm, echm, plan, spacing, hmin, progress)
-      self$layout_warnings = validate_tree(trees, plan, spacing, hmin)
-      self$trees = trees
+      self$layout$tree_layout_adjusted = relocate_trees(chm, echm, plan, spacing, hmin, progress)
+      self$layout_warnings = validate_tree(self$layout$tree_layout_adjusted, plan, spacing, hmin)
 
-      if (is.null(self$fmeasurements))
-        self$fmeasurements = paste0(self$wd,  "/tree_measurements.gpkg")
+      if (is.null(self$fdebug))
+        self$fdebug = paste0(self$wd,  "/debug.gpkg")
 
-      sf::st_write(self$trees, dsn = self$fmeasurements, layer = "trees", quiet = TRUE, append = FALSE)
+      if (file.exists(self$fdebug))
+        file.remove(self$fdebug)
+
+      sf::st_write(self$layout$tree_layout_adjusted, dsn = self$fdebug, layer = "positions", quiet = TRUE, append = FALSE)
+      if (!is.null(self$layout_warnings$warn))
+        sf::st_write(self$layout_warnings$warn, dsn = self$fdebug, layer = "warnings", quiet = TRUE, append = FALSE)
+      sf::st_write(self$layout_warnings$move, dsn = self$fdebug, layer = "moves", quiet = TRUE, append = FALSE)
 
       self$params$treesHmin = hmin
       self$write_config()
@@ -304,18 +311,17 @@ Plantation <- R6::R6Class("Plantation",
 
     measure_trees = function(hmin = 2, watershed = FALSE, progress = NULL)
     {
-      if (is.null(self$chm)) stop("CHM is NULL")
-      if (is.null(self$schm)) stop("Smooth CHM is NULL")
-      if (is.null(self$trees)) stop("Tree layout is NULL")
-      if (is.null(self$layout$spacing)) stop("Spacing is NULL")
-      if (is.null(hmin)) stop("hmin is NULL")
-      if (!is.numeric(hmin) || length(hmin) != 1 || hmin <= 0)
-        stop("hmin must be a single positive numeric value")
+      if (is.null(self$chm)) stop("No CHM available")
+      if (is.null(self$schm)) stop("No smoothed CHM available")
+      if (is.null(self$layout$tree_layout_adjusted)) stop("No tree layout available")
+      if (is.null(self$layout$spacing)) stop("No spacing available in tree layout")
+      if (is.null(hmin)) stop("No hmin argument")
+      if (!is.numeric(hmin) || length(hmin) != 1 || hmin <= 0) stop("hmin must be a single positive numeric value")
 
       chm = self$chm
       echm = self$schm
       echm[is.na(echm)] = 0
-      trees = self$trees
+      trees = self$layout$tree_layout_adjusted
       spacing = self$layout$spacing
 
       ans <- measure_trees(trees, chm, echm, spacing, hmin, use_dalponte = !watershed, progress = progress)
@@ -325,6 +331,9 @@ Plantation <- R6::R6Class("Plantation",
 
       if (is.null(self$fmeasurements))
         self$fmeasurements = paste0(self$wd,  "/tree_measurements.gpkg")
+
+      if (file.exists(self$fmeasurements))
+          file.remove(self$fmeasurements)
 
       self$joint_database()
 
@@ -750,7 +759,8 @@ Plantation <- R6::R6Class("Plantation",
 
       if (!is.null(self$layout) & layout)
       {
-        data = sf::st_transform(self$layout$block_layout, 4326)
+        data = sf::st_transform(self$layout$block_layout_oriented, 4326)
+        data = data[data$BlockID > 0, ]
         map = map |> leaflet::addPolygons(data = data, group = "Block layout",  color = "black", fill = FALSE, weight = 3)
         overlayGroups = c(overlayGroups, "Block layout")
       }
@@ -761,20 +771,23 @@ Plantation <- R6::R6Class("Plantation",
         map = map |> leaflet::addPolylines(data = data, group = "Move", color = "white", fill = FALSE, weight = 2, opacity = 0.9)
         overlayGroups = c(overlayGroups, "Move")
 
-        reason = self$layout_warnings$warn$reason
-        pal <- leaflet::colorFactor(palette = c('yellow', 'green'), domain = reason)
+        if (!is.null(self$layout_warnings$warn))
+        {
+          reason = self$layout_warnings$warn$reason
+          pal <- leaflet::colorFactor(palette = c('yellow', 'green'), domain = reason)
 
-        data = sf::st_transform(self$trees, 4326)
-        map = map |> leaflet::addPolygons(data = sf::st_transform(self$layout_warnings$warn, 4326), opacity = 0.9, group = "Warnings", color = ~pal(reason), fill = FALSE, weight = 3)
-        overlayGroups = c(overlayGroups, "Warnings")
+          data = sf::st_transform(self$trees, 4326)
+          map = map |> leaflet::addPolygons(data = sf::st_transform(self$layout_warnings$warn, 4326), opacity = 0.9, group = "Warnings", color = ~pal(reason), fill = FALSE, weight = 3)
+          overlayGroups = c(overlayGroups, "Warnings")
 
-        map = map |>
-          leaflet::addLegend(
-            position = "bottomleft",
-            pal = pal,
-            values = reason,
-            title = "Warnings"
-          )
+          map = map |>
+            leaflet::addLegend(
+              position = "bottomleft",
+              pal = pal,
+              values = reason,
+              title = "Warnings"
+            )
+        }
       }
 
       if (!is.null(self$crowns) & trees)
@@ -789,10 +802,12 @@ Plantation <- R6::R6Class("Plantation",
 
       if (!is.null(self$layout) & layout)
       {
-        if (is.null(self$trees))
-          data = sf::st_transform(self$layout$tree_layout, 4326)
+        if (!is.null(self$layout$tree_layout_adjusted))
+          data = sf::st_transform(self$layout$tree_layout_adjusted, 4326)
         else
-          data = sf::st_transform(self$trees, 4326)
+          data = sf::st_transform(self$layout$tree_layout_oriented, 4326)
+
+        data = remove_virtual_trees(data)
 
         if (!is.null(data$ApexFound))
         {
@@ -816,6 +831,7 @@ Plantation <- R6::R6Class("Plantation",
       if (!is.null(self$trees) & trees)
       {
         data = sf::st_transform(self$trees, 4326)
+        data = remove_virtual_trees(data)
 
         pal <- leaflet::colorNumeric(palette = viridis::viridis(8), domain = data$Height)
 
@@ -1026,8 +1042,15 @@ Plantation <- R6::R6Class("Plantation",
       if (!is.null(config$measurements))
       {
         self$set_measurements(config$measurements$file, nowrite = TRUE)
-        self$params$smoothCHM = config$measurements$smoothCHM
-        self$params$smoothPasses = config$measurements$smoothPasses
+      }
+      if (!is.null(config$debug))
+      {
+        self$fdebug = config$debug$file
+        self$layout$tree_layout_adjusted = sf::st_read(self$fdebug, layer = "positions", quiet = TRUE)
+        self$layout_warnings = list(
+          warn = tryCatch({sf::st_read(self$fdebug, layer = "warnings", quiet = TRUE)}, error = function(e) NULL),
+          move = sf::st_read(self$fdebug, layer = "moves", quiet = TRUE)
+        )
       }
       if (!is.null(config$database)) self$fdatabase = config$database$file
 
@@ -1065,11 +1088,15 @@ Plantation <- R6::R6Class("Plantation",
       )
       config$measurements = list(
         file = self$fmeasurements,
-        treeHmin = self$params$treeHmin,
-        crownHmin = self$params$crownHmin
+        treesHmin = self$params$treesHmin,
+        crownsHmin = self$params$crownsHmin,
+        crownsWatershed = self$params$crownsWatershed
       )
       config$database = list(
         file = self$fdatabase
+      )
+      config$debug = list(
+        file = self$fdebug
       )
       config$crs = list(
         wkt = self$crs$wkt,

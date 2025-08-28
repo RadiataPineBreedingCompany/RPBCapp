@@ -252,7 +252,9 @@ ui <- page_navbar(
         wellPanel(
           tags$p(tags$strong("Run adjustment")),
           tooltiped("Run automatic adjustment", "The layout pattern is not 100% accurate. This step starts from the tree plantation layout and retrieve the real positions of the trees"),
-          sliderInput("hminAdjustTreesSlider", "Minimal height", min = 0, max = 10, value = 2, step = 0.25),
+          sliderInput("hminAdjustTreesSlider",
+                      "Minimal height",
+                      min = 0, max = 10, value = 2, step = 0.25),
           actionButton("adjustLayoutButton", "Adjust trees")
         )
       ),

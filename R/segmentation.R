@@ -67,11 +67,13 @@ relocate_trees = function(chm, echm, plan, spacing, hmin, progress = NULL)
   # Visualize
   if (FALSE)
   {
+    f = tempfile(fileext = ".tif")
+    u = terra::writeRaster(echm, f, overwrite = T)
     col <- c("red", "blue")
     leaflet::leaflet() |>
       leaflet::addProviderTiles(leaflet::providers$Esri.WorldImagery, options = leaflet::providerTileOptions(minZoom = 8, maxZoom = 22)) |>
       leaflet::addTiles() |>
-      leafem::addGeotiff(terra::sources(echm), colorOptions = leafem::colorOptions(palette = lidR::height.colors(20)), na.color = "transparent") |>
+      leafem::addGeotiff(terra::sources(u), colorOptions = leafem::colorOptions(palette = lidR::height.colors(20)), na.color = "transparent") |>
       leaflet::addCircleMarkers(data = sf::st_transform(tmp,4326), radius = 2, color = col[is_local_max + 1], fillOpacity = 0.9, stroke = FALSE) |>
       leaflet::addLegend(position = "topright", colors = col, labels = c("not local max", "local max"), title = "CHM et plan corrigé")
   }
@@ -89,10 +91,6 @@ relocate_trees = function(chm, echm, plan, spacing, hmin, progress = NULL)
   trees$TreeFound[trees$ApexFound == FALSE & is.na(trees$TreeFound)] = TRUE
   sf::st_geometry(trees) = sf::st_geometry(tmp)
 
-  trees$ID = NULL
-  trees$H = NULL
-  trees$TREEID = 1:nrow(trees)
-
   #trees = cbind(mesurage[!cut,], trees)
   trees = sf::st_as_sf(trees)
 
@@ -102,6 +100,10 @@ relocate_trees = function(chm, echm, plan, spacing, hmin, progress = NULL)
 #' @export
 validate_tree = function(trees, plan, spacing, hmin)
 {
+  trees = remove_virtual_trees(trees)
+  plan = remove_virtual_trees(plan)
+
+  trees$TREEID = plan$TREEID = 1:nrow(plan)
   # Is there some duplicated trees?
   validation = data.table::as.data.table(sf::st_coordinates(trees))
   validation$ApexFound = trees$ApexFound
@@ -122,26 +124,25 @@ validate_tree = function(trees, plan, spacing, hmin)
   dist_matrix = sf::st_distance(trees)
   class(dist_matrix) = "matrix"
   diag(dist_matrix) <- Inf
-  too_close <- which(dist_matrix < th, arr.ind = TRUE)
-  if (nrow(too_close > 0))
+  idx <- which(dist_matrix < th, arr.ind = TRUE)
+  too_close = NULL
+  if (nrow(idx) > 0)
   {
-    too_close = trees[too_close[,1], ]
-    too_close = sf::st_buffer(too_close, th)
-    #plot(sf::st_geometry(too_close), col = NA, border = "yellow", cex = 2, add = T)
-    #st_write(too_close, ftooclosedebug, delete_dsn = TRUE)
+    too_close = trees[idx[,1], ]
+    too_close = sf::st_buffer(idx, th)
+    too_close$reason = "Too close"
   }
 
 
   # No apex but relatively high height. We are expecting those tree to be on the ground
-  b = trees$ApexFound == FALSE & trees$Height > hmin
-  too_high = trees[b,]
-  if (nrow(too_high) > 0)
-  {
-    too_high = trees[too_high[,1], ]
-    too_high = sf::st_buffer(too_high, spacing/2)
-    #plot(sf::st_geometry(too_high), col = NA, border = "green", cex = 2, add = T)
-    #st_write(too_high, ftoohighdebug, delete_dsn = TRUE)
-  }
+  #b = trees$TreeFound == TRUE & !trees$ApexFound
+  #too_high = NULL
+  #if (sum(b) > 0)
+  #{
+  #  too_high = trees[b, ]
+  #  too_high = sf::st_buffer(too_high, spacing/2)
+  #  too_high$reason = "Too high"
+  #}
 
   # Vector of movements
   coords_tmp <- sf::st_coordinates(trees)
@@ -150,10 +151,8 @@ validate_tree = function(trees, plan, spacing, hmin)
   debug_lines <- sf::st_sf(geometry = debug_lines)
   suppressWarnings(sf::st_crs(debug_lines) <- sf::st_crs(trees))
 
-  reason = c(rep("Too close", nrow(too_close)), rep("Too high", nrow(too_high)))
-  tree_warning = c(sf::st_geometry(too_close), sf::st_geometry(too_high))
-  tree_warning = sf::st_as_sf(tree_warning)
-  tree_warning$reason = reason
+
+  tree_warning = too_close
 
   return(list(move = debug_lines, warn = tree_warning))
   #plot(debug_lines, add = T, col = "white")
@@ -168,21 +167,25 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
 
   names(chm) = "Z"
   names(echm) = "Z"
+  chm = terra::toMemory(chm)
+  echm = terra::toMemory(echm)
 
   col = lidR::pastel.colors(nrow(trees))
 
   prog$tick(1, "Individual tree segmentation")
 
-  # Merge the extra trees required to buffer the segmentation
-  #extra = sf::st_as_sf(extra)
-  #extra$TREEID = -(1:nrow(extra))
-  pos = c(sf::st_geometry(trees))#, sf::st_geometry(extra))
-  id = c(trees$TREEID)#, extra$TREEID)
+  pos = sf::st_geometry(trees)
+
+  nofound = trees$ApexFound == FALSE
+  virtual_trees = trees$Block < 0
+
+  # Handle extra trees required to buffer the segmentation
+  id = 1:nrow(trees)
   seeds = sf::st_as_sf(data.frame(TREEID = id, geometry = pos))
 
   if (use_dalponte)
   {
-    segment = lidR::dalponte2016(echm*1L, seeds, th_cr = 0, max_cr = spacing/2/terra::res(echm)[1]*1.25, th_tree = hmin, ID = "TREEID")
+    segment = lidR::dalponte2016(echm, seeds, th_cr = 0, max_cr = spacing/2/terra::res(echm)[1]*1.25, th_tree = hmin, ID = "TREEID")
     rcrowns = segment()
     pcrown = sf::st_as_sf(terra::as.polygons(rcrowns))
     names(pcrown)[1] = "TREEID"
@@ -193,25 +196,24 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
     pcrown <- ForestTools::mcws(treetops = seeds, CHM = echm, minHeight = hmin, IDfield = "TREEID", format = "polygons")
   }
 
+
   prog$tick(2, "Individual tree measurement")
-
-  pcrown =  sf::st_simplify(pcrown, dTolerance = 0.1)
-
-  # Remove the extra trees
-  pcrown = pcrown[pcrown$TREEID > 0,]
 
   pcrown$ApexFound = trees$ApexFound
   #pcrown = cbind(mesurage[!cut,], pcrown)
   pcrown = sf::st_as_sf(pcrown)
 
-
   # Extract pixel values for each crown to estimate the height
   val = terra::extract(chm, pcrown)
   height = aggregate(val$Z, by = list(val$ID), max, na.rm = TRUE)$x
   height[is.infinite(height)] = NA
+  height[nofound] = NA
 
   area = round(as.numeric(sf::st_area(pcrown)), 2)
   area[area == 0] = NA
+  area[nofound] = NA
+
+  pcrown =  sf::st_simplify(pcrown, dTolerance = 0.1)
 
   pcrown$CrownArea = area
   pcrown$Height = round(height,2)
@@ -232,10 +234,13 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
   #trees$ApexFound = NULL
   pcrown$ApexFound = NULL
 
-  order <- c( "Block", "Tpos", "Prow", "Pcol", "ApexFound", "TreeFound", "Height", "CrownArea", "geometry")
+  order <- c("Block", "Tpos", "Prow", "Pcol", "ApexFound", "TreeFound", "Height", "CrownArea", attr(trees, "sf_column"))
   trees = trees[, order]
-  order <- c( "Block", "Tpos", "Prow", "Pcol", "Height", "CrownArea", "geometry")
+  order <- c( "Block", "Tpos", "Prow", "Pcol", "Height", "CrownArea", attr(pcrown, "sf_column"))
   pcrown = pcrown[, order]
+
+  pcrown = pcrown[virtual_trees == FALSE,]
+  trees = trees[virtual_trees == FALSE,]
 
   prog$tick(3, "Done")
 

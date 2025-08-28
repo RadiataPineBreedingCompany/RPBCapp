@@ -53,12 +53,12 @@ self$leaflet()
 # TEST TREE LAYOUT
 # ========================
 
-file = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/19BP01_test/BC19BP01CKT_EstReport.xlsx"
+file = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/19BP01/BC19BP01CKT_EstReport.xlsx"
 
 block_size <- 18.6
 num_trees <- 6
 
-self = RPBCLayout$new()
+self = RPBCapp:::RPBCLayout$new()
 self$read_layout(file)
 self$build_layout(block_size, num_trees, start = "bl", orientation = "v")
 self$plot()
@@ -103,7 +103,7 @@ self$layout$set_origin(1916419.46, 5738336.67)
 self$layout$set_origin(1916419.40, 5738336.70)
 self$leaflet()
 
-angle = layout_alignment_angle(self$layout$tree_layout, self$schm, self$layout$origin, self$layout$spacing*0.75)
+angle = layout_alignment_angle(self$layout$tree_layout_oriented, self$schm, self$layout$origin, self$layout$spacing*0.75)
 angle
 self$layout$set_angle(-angle)
 self$leaflet()
@@ -124,7 +124,7 @@ self$read_config(conf)
 self$layout$plot()
 self$set_crs(2193)
 self$layout$set_origin(1916419.46, 5738336.67)
-res = layout_alignment_angle(self$layout$tree_layout, self$schm, self$layout$origin, self$layout$spacing*0.75, self$boundaries)
+res = layout_alignment_angle(self$layout$tree_layout_oriented, self$schm, self$layout$origin, self$layout$spacing*0.75, self$boundaries)
 res
 angle = res[1]
 tx = res[2]
@@ -139,7 +139,7 @@ self$leaflet()
 
 self$adjust_layout(2)
 self$leaflet(dtm = FALSE)
-self$measure_trees(6)
+self$measure_trees(4.5)
 self$leaflet(dtm = FALSE, layout = FALSE)
 
 trees = self$trees
@@ -161,47 +161,6 @@ p = round(n/N*100,1)
 
 library(ggplot2)
 
-# Height vs Block
-p1 = ggplot(self$trees, aes(x = as.factor(Block), y = Height, fill = as.factor(Block))) +
-  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
-  theme_bw() +
-  guides(fill = "none") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  scale_x_discrete(
-    breaks = levels(as.factor(spatial_db$Block))[seq(1, length(unique(spatial_db$Block)), 5)]
-  ) +
-  labs(
-    title = "Height Distribution by Block",
-    x = "Block",
-    y = "Height (m)",
-    fill = "Block"
-  )
 
-# Height vs CloneCode
-p2 = ggplot(spatial_db, aes(x = as.factor(CloneCode), y = Height, fill = as.factor(CloneCode), col = as.factor(CloneCode))) +
-  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
-  theme_bw() +
-  guides(fill = "none", col = "none") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(
-    title = "Height Distribution by Clone Code",
-    x = "Clone Code",
-    y = "Height (m)",
-    fill = "Clone Code"
-  )
+hist(self$crowns$CrownArea)
 
-# Height vs FamilyCode
-p3 = ggplot(spatial_db, aes(x = as.factor(FamilyCode), y = Height, fill = as.factor(FamilyCode))) +
-  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
-  theme_bw() +
-  guides(fill = "none")+
-  scale_x_discrete(
-    breaks = levels(as.factor(spatial_db$FamilyCode))[seq(1, length(unique(spatial_db$FamilyCode)), 5)]
-  ) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(
-    title = "Height Distribution by Family Code",
-    x = "Family Code",
-    y = "Height (m)",
-    fill = "Family Code"
-  )

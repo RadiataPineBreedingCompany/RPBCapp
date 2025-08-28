@@ -2,6 +2,7 @@
 layout_alignment_angle = function(layout, chm, pivot, ws, boundaries)
 {
   ttps = lidR::locate_trees(chm, lidR::lmf(ws))
+  layout = remove_virtual_trees(layout)
   u = sf::st_contains(boundaries, ttps)
   ttps = ttps[u[[1]],]
 
