@@ -6,6 +6,7 @@ Plantation <- R6::R6Class("Plantation",
     # Files
     wd = NULL,
     fconfig = NULL,
+    flayout = NULL,
     flas = NULL,
     fdatabase = NULL,
     fboundaries = NULL,
@@ -100,8 +101,8 @@ Plantation <- R6::R6Class("Plantation",
       self$las = NULL
 
       # Compute bounding box
-      header = lidR::readLASheader(file)
-      PHB = header@PHB
+      header <- lidR::readLASheader(file)
+      PHB  <- header@PHB
       crs  <- lidR::st_crs(header)
       xmin <- PHB[["Min X"]]
       xmax <- PHB[["Max X"]]
@@ -111,7 +112,7 @@ Plantation <- R6::R6Class("Plantation",
       geom <- sf::st_polygon(list(mtx))
       geom <- sf::st_sfc(geom)
       sf::st_crs(geom) <- crs
-      self$bbox = geom
+      self$bbox <- geom
       self$set_crs(crs, nowrite)
 
       if (!nowrite)
@@ -122,7 +123,7 @@ Plantation <- R6::R6Class("Plantation",
     {
       assert_file_exists(file)
 
-      boundaries = sf::st_read(file, quiet = TRUE)
+      boundaries <- sf::st_read(file, quiet = TRUE)
 
       assert_sf_polygon(boundaries)
 
@@ -144,11 +145,16 @@ Plantation <- R6::R6Class("Plantation",
 
     set_chm = function(file, nowrite = FALSE)
     {
+      cat("Set CHM:", file, "\n")
+
       assert_file_exists(file)
 
       self$fchm = file
       self$chm = terra::rast(file)
       self$clip()
+
+      if (is.null(self$crs) || self$crs == sf::NA_crs_ )
+        self$set_crs(sf::st_crs(self$chm), nowrite)
 
       if (!nowrite)
         self$write_config()
@@ -156,11 +162,16 @@ Plantation <- R6::R6Class("Plantation",
 
     set_dtm = function(file, nowrite = FALSE)
     {
+      cat("Set DTM:", file, "\n")
+
       assert_file_exists(file)
 
       self$fdtm = file
       self$dtm = terra::rast(file)
       self$clip()
+
+      if (is.null(self$crs) || self$crs == sf::NA_crs_ )
+        self$set_crs(sf::st_crs(self$chm), nowrite)
 
       if (!nowrite)
         self$write_config()
@@ -168,11 +179,16 @@ Plantation <- R6::R6Class("Plantation",
 
     set_schm = function(file, nowrite = FALSE)
     {
+      cat("Set sCHM:", file, "\n")
+
       assert_file_exists(file)
 
       self$fschm = file
       self$schm = terra::rast(file)
       self$clip()
+
+      if (is.null(self$crs) || self$crs == sf::NA_crs_ )
+        self$set_crs(sf::st_crs(self$chm), nowrite)
 
       if (!nowrite)
         self$write_config()
@@ -180,6 +196,8 @@ Plantation <- R6::R6Class("Plantation",
 
     set_database = function(file, nowrite = TRUE)
     {
+      cat("Set database:", file, "\n")
+
       assert_file_exists(file)
 
       sheet_name = "Sorted Linear File"
@@ -198,11 +216,16 @@ Plantation <- R6::R6Class("Plantation",
 
     set_layout = function(file, nowrite = FALSE)
     {
+      cat("Set layout", file, "\n")
+
       assert_file_exists(file)
 
       self$layout = RPBCLayout$new()
       self$layout$read_layout(file)
-      self$fdatabase = file
+      self$flayout = file
+
+      if (self$crs == sf::NA_crs_)
+        self$set_crs(sf::st_crs(self$layout$tree_layout_oriented), nowrite)
 
       if (!nowrite)
         self$write_config()
@@ -210,8 +233,12 @@ Plantation <- R6::R6Class("Plantation",
 
     set_layout_parameter = function(block_size, num_trees, start, orientation, nowrite = FALSE)
     {
+      cat("Set layout parameter\n")
+
       if (is.null(self$layout))
         stop("No 'layout' object yet. Read and Excel file first")
+
+      stopifnot(!is.na(block_size), !is.na(num_trees), !is.na(start[1]), !is.na(orientation))
 
       self$layout$build_layout(block_size, num_trees, start = start, orientation = orientation)
 
@@ -300,10 +327,9 @@ Plantation <- R6::R6Class("Plantation",
       if (file.exists(self$fdebug))
         file.remove(self$fdebug)
 
-      sf::st_write(self$layout$tree_layout_adjusted, dsn = self$fdebug, layer = "positions", quiet = TRUE, append = FALSE)
+      sf::st_write(self$layout_warnings$move, dsn = self$fdebug, layer = "moves", quiet = TRUE, append = FALSE)
       if (!is.null(self$layout_warnings$warn))
         sf::st_write(self$layout_warnings$warn, dsn = self$fdebug, layer = "warnings", quiet = TRUE, append = FALSE)
-      sf::st_write(self$layout_warnings$move, dsn = self$fdebug, layer = "moves", quiet = TRUE, append = FALSE)
 
       self$params$treesHmin = hmin
       self$write_config()
@@ -571,6 +597,9 @@ Plantation <- R6::R6Class("Plantation",
         self$las = lidR::classify_ground(self$las, lidR::csf(class_threshold = 0.05, rigidness = rigidness, cloth_resolution = cloth_resolution), last_returns = FALSE)
       }
 
+      self$params$rigidness = rigidness
+      self$params$cloth_resolution = cloth_resolution
+
       self$write_config()
     },
 
@@ -607,9 +636,6 @@ Plantation <- R6::R6Class("Plantation",
       dtm <- terra::resample(dtm, chm, method = "bilinear")  # or "near" if categorical
       chm = chm - dtm
 
-      print(self$las)
-      print(chm)
-
       # Save on disk
       if (!is.null(self$wd))
       {
@@ -618,12 +644,14 @@ Plantation <- R6::R6Class("Plantation",
         self$chm = terra::rast(self$fchm)
       }
 
+      self$params$resCHM = res
+
       self$write_config()
     },
 
     joint_database = function()
     {
-      if (!is.null(self$trees))
+      if (!is.null(self$trees) & !is.null(self$fdatabase))
       {
         db = readxl::read_excel(self$fdatabase, sheet = "Sorted Linear File")
         names(db)[names(db) == "Pset(Block)"] <- "Block"
@@ -757,7 +785,7 @@ Plantation <- R6::R6Class("Plantation",
         overlayGroups = c(overlayGroups, "Boundaries")
       }
 
-      if (!is.null(self$layout) & layout)
+      if (!is.null(self$layout$block_layout_oriented) & layout)
       {
         data = sf::st_transform(self$layout$block_layout_oriented, 4326)
         data = data[data$BlockID > 0, ]
@@ -993,13 +1021,15 @@ Plantation <- R6::R6Class("Plantation",
     {
       assert_file_ext(file, "rpbc")
 
-      self$wd = dirname(file)
-      self$fconfig = file
+      self$wd <- dirname(file)
+      self$fconfig <- file
       self$write_config()
     },
 
     read_config = function(file)
     {
+      cat("Read config file:", file, "\n")
+
       assert_file_ext(file, "rpbc")
 
       self$wd = dirname(file)
@@ -1010,10 +1040,16 @@ Plantation <- R6::R6Class("Plantation",
       {
         self$set_cloud(config$point_cloud$file, nowrite = TRUE)
         self$params$keepRandomFraction = config$point_cloud$fraction
+        self$params$rigidness = config$point_cloud$rigidness
+        self$params$cloth_resolution = config$point_cloud$cloth_resolution
       }
       if (!is.null(config$boundaries)) self$set_boundaries(config$boundaries$file, nowrite = TRUE)
       if (!is.null(config$dtm)) self$set_dtm(config$dtm$file, nowrite = TRUE)
-      if (!is.null(config$chm)) self$set_chm(config$chm$file, nowrite = TRUE)
+      if (!is.null(config$chm))
+      {
+        self$set_chm(config$chm$file, nowrite = TRUE)
+        self$params$resCHM = config$chm$res
+      }
       if (!is.null(config$schm))
       {
         self$set_schm(config$schm$file, nowrite = TRUE)
@@ -1023,21 +1059,24 @@ Plantation <- R6::R6Class("Plantation",
       if (!is.null(config$layout))
       {
         self$set_layout(config$layout$file, nowrite = TRUE)
-        if (!is.null(config$layout$block_size))
+        if (!self$layout$from_geodatabase)
         {
-          self$set_layout_parameter(
-            block_size = config$layout$block_size,
-            num_trees = config$layout$num_trees,
-            start = config$layout$start,
-            orientation = config$layout$orientation,
-            nowrite = TRUE)
+          if (!is.null(config$layout$block_size))
+          {
+            self$set_layout_parameter(
+              block_size = config$layout$block_size,
+              num_trees = config$layout$num_trees,
+              start = config$layout$start,
+              orientation = config$layout$orientation,
+              nowrite = TRUE)
+          }
+
+          if (!is.null(config$layout$origin))
+            self$layout$set_origin(config$layout$origin[[1]], config$layout$origin[[2]])
+
+          if (!is.null(config$layout$angle))
+            self$layout$set_angle(config$layout$angle)
         }
-
-        if (!is.null(config$layout$origin))
-          self$layout$set_origin(config$layout$origin[[1]], config$layout$origin[[2]])
-
-        if (!is.null(config$layout$angle))
-          self$layout$set_angle(config$layout$angle)
       }
       if (!is.null(config$measurements))
       {
@@ -1046,7 +1085,6 @@ Plantation <- R6::R6Class("Plantation",
       if (!is.null(config$debug))
       {
         self$fdebug = config$debug$file
-        self$layout$tree_layout_adjusted = sf::st_read(self$fdebug, layer = "positions", quiet = TRUE)
         self$layout_warnings = list(
           warn = tryCatch({sf::st_read(self$fdebug, layer = "warnings", quiet = TRUE)}, error = function(e) NULL),
           move = sf::st_read(self$fdebug, layer = "moves", quiet = TRUE)
@@ -1060,25 +1098,47 @@ Plantation <- R6::R6Class("Plantation",
 
     write_config = function()
     {
+      cat("Write config file\n")
+
       if (is.null(self$fconfig))
         stop("Impossible to save the project. No project file associated.")
 
       config = list()
+
+      # Insert the RPBC file format
       config$format = list(signature = "RPBC", version = 1.0)
+
+      # For point cloud we store
+      # - the file
+      # - ground classification CSF parameters
+      # - CHM resolution
+      # - the random fraction to read
       config$point_cloud = list(
         file = self$flas,
-        fraction = self$params$keepRandomFraction
+        fraction = self$params$keepRandomFraction,
+        rigidness = self$params$rigidness,
+        cloth_resolution = self$params$cloth_resolution
       )
+
       config$boundaries = list(file = self$fboundaries)
       config$dtm = list(file = self$fdtm)
-      config$chm = list(file = self$fchm)
+
+      config$chm = list(
+        file = self$fchm,
+        res = self$params$resCHM
+      )
+
       config$schm = list(
         file = self$fschm,
         smoothCHM = self$params$smoothCHM,
         smoothPasses = self$params$smoothPasses
       )
+
+      # The layout is the theoretic position of the trees. It can be either an Excel file with block
+      # layout from which we build the trees positions on-the-fly using block size, tree count and so on.
+      # It can also be a geospatial file with the tree positions
       config$layout = list(
-        file = self$fdatabase,
+        file = self$flayout,
         block_size = self$layout$block_size,
         num_trees = self$layout$num_trees,
         start = self$layout$start,
@@ -1086,18 +1146,25 @@ Plantation <- R6::R6Class("Plantation",
         angle = self$layout$angle,
         origin = self$layout$origin
       )
+
+      # Measurements file is the final file with exact tree positions and measurement for each tree
+      # It is a geopackage with two layers for the trees (POINTS) and the crowns (POLYGON)
       config$measurements = list(
         file = self$fmeasurements,
         treesHmin = self$params$treesHmin,
         crownsHmin = self$params$crownsHmin,
         crownsWatershed = self$params$crownsWatershed
       )
+
+      # This is the excel database
       config$database = list(
         file = self$fdatabase
       )
+
       config$debug = list(
         file = self$fdebug
       )
+
       config$crs = list(
         wkt = self$crs$wkt,
         epsg = self$crs$epsg
@@ -1140,6 +1207,12 @@ assert_sf_polygon = function(sf)
 {
   if (sf::st_geometry_type(sf) != "POLYGON")
     stop(paste0("Entities are expected to be POLYGON not ", sf::st_geometry_type(sf)))
+}
+
+assert_sf_point = function(sf)
+{
+  if (sf::st_geometry_type(sf) != "POINT")
+    stop(paste0("Entities are expected to be POINT not ", sf::st_geometry_type(sf)))
 }
 
 assert_point_cloud_loaded = function(las)

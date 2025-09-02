@@ -159,8 +159,22 @@ N = nrow(trees)
 n = sum(!trees$ApexFound & trees$TreeFound)
 p = round(n/N*100,1)
 
-library(ggplot2)
 
 
-hist(self$crowns$CrownArea)
+# =========================
+# TEST USE GEO LAYOUT
+# ========================
 
+conf = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/test/test.rpbc"
+lay = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/example_load_project/tree_measurements.gpkg"
+db = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/example_load_project/BC19BP01CKT_EstReport.xlsx"
+self = Plantation$new()
+self$read_config(conf)
+self$set_layout(lay)
+self$set_layout_parameter(block_size, num_trees, start = "bl", orientation = "v")
+self$set_database(db)
+self$layout$plot()
+self$set_layout_parameter(block_size, num_trees, start = "bl", orientation = "v")
+self$leaflet()
+self$adjust_layout(2)
+self$measure_trees(4)

@@ -11,6 +11,7 @@ RPBCLayout <- R6::R6Class("Plantation",
     tree_layout_adjusted = NULL,
 
     crs = NULL,
+
     origin = c(0,0),
     angle = 0,
     orientation = 'v',
@@ -19,21 +20,61 @@ RPBCLayout <- R6::R6Class("Plantation",
     num_trees = NA,
     spacing = NA,
 
+    from_geodatabase = FALSE,
+
     initialize = function()
     {
     },
 
+    # The layout is the theoretical pattern of trees. It can be computed from the Excel database
+    # or can be read from a shape file. If read from the Excel database what we read is actually
+    # the block layout. From the block layout we can compute the tree position with build_layout().
+    # However we already have the tree position if read from a geospatial database.
     read_layout = function(file, sheet_name = "Linear Layout Map")
     {
-      sheets <- readxl::excel_sheets(file)
-      if (!sheet_name %in% sheets)
-        stop(paste("Sheet", sheet_name, "does not exist in the Excel file"))
+      cat("Read layout:", file, "\n")
 
-      self$block_layout_table = readxl::read_excel(file, sheet = sheet_name)
+      ext = tools::file_ext(file)
+
+      if (ext %in% c("xls", "xlsx"))
+      {
+        sheets <- readxl::excel_sheets(file)
+        if (!sheet_name %in% sheets)
+          stop(paste("Sheet", sheet_name, "does not exist in the Excel file"))
+
+        self$block_layout_table = readxl::read_excel(file, sheet = sheet_name)
+      }
+      else if (ext %in% c("shp", "gpkg"))
+      {
+        layout = sf::st_read(file, quiet = TRUE)
+
+        assert_sf_point(layout)
+
+        if (any(!c("Tpos", "Block", "Prow", "Pcol") %in% names(layout)))
+          stop("The tree layout must have attributes named 'Tpos', 'Block', 'Prow' and 'Pcol'")
+
+        # Estimate spacing
+        d = sf::st_coordinates(layout)
+        d = RANN::nn2(d, k = 4)
+        d = d$nn.dists[,-1]
+        self$spacing = stats::median(d)
+
+        self$tree_layout_oriented = layout[,c("Tpos", "Block", "Prow", "Pcol")]
+        self$block_layout_raw = self$tree_layout_oriented
+        self$from_geodatabase = TRUE
+      }
+      else
+      {
+        stop("Invalid file format in RPBCLayout::read_layout(). Please report.")
+      }
     },
 
     build_layout = function(block_size, num_trees, start, orientation)
     {
+      if (self$from_geodatabase) return()
+
+      cat("Build layout:", block_size, num_trees, start, orientation, "\n")
+
       if (is.null(self$block_layout_table))
         stop("No block layout table. Load an Excel file first")
 
@@ -52,10 +93,10 @@ RPBCLayout <- R6::R6Class("Plantation",
     {
       if (!is.null(crs))
       {
-        sf::st_crs(self$block_layout_raw) = crs
-        sf::st_crs(self$tree_layout_raw) = crs
-        sf::st_crs(self$block_layout_oriented) = crs
-        sf::st_crs(self$tree_layout_oriented) = crs
+        if (!is.null(self$block_layout_raw)) sf::st_crs(self$block_layout_raw) = crs
+        if (!is.null(self$tree_layout_raw)) sf::st_crs(self$tree_layout_raw) = crs
+        if (!is.null(self$block_layout_oriented)) sf::st_crs(self$block_layout_oriented) = crs
+        if (!is.null(self$tree_layout_oriented)) sf::st_crs(self$tree_layout_oriented) = crs
       }
     },
 
@@ -73,6 +114,8 @@ RPBCLayout <- R6::R6Class("Plantation",
 
     move = function()
     {
+      if (self$from_geodatabase) return()
+
       crs = sf::st_crs(self$block_layout_raw)
 
       angle = self$angle

@@ -80,14 +80,12 @@ ui <- page_navbar(
               )
             )
           ),
-          tags$br(),
           tooltiped("3. Select a boundary file ", "A geospatial file containing plantation boundaries."),
           shinyFiles::shinyFilesButton(
             'loadBoundaryFileButton', 'Select geospatial file', 'Please select a geospatial file',
             FALSE,
             viewtype = "icon",
             icon = bsicons::bs_icon("bounding-box")),
-          tags$br(),
           tooltiped("4. Select a database file ", "Select an Excel file containing the plantation database."),
           shinyFiles::shinyFilesButton(
             'loadBlockPatternFileButton', 'Select Excel file', 'Please select an Excel file',

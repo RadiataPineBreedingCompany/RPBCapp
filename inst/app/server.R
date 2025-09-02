@@ -94,6 +94,7 @@ server <- function(input, output, session)
   shinyFiles::shinyFileChoose(input, "loadCHMFileButton", roots = volumes, filetypes = c('tif', 'tiff'))
   shinyFiles::shinyFileChoose(input, "loadConfigFileButton", roots = volumes, filetypes = c('rpbc'))
   shinyFiles::shinyFileChoose(input, "loadBoundaryFileButton", roots = volumes, filetypes = c('shp', "gpkg"))
+  shinyFiles::shinyFileChoose(input, "loadTreeMapFileButton", roots = volumes, filetypes = c('shp', "gpkg"))
   shinyFiles::shinyFileChoose(input, "loadBlockPatternFileButton", roots = volumes, filetypes = c('xls', 'xlsx'))
   shinyFiles::shinyFileSave(input, "createProjectButton", roots = volumes)
 
@@ -158,6 +159,9 @@ server <- function(input, output, session)
         updateSliderInput(session, "hminAdjustTreesSlider", value = plantation$params$treeHmin)
         updateSliderInput(session, "hminMeasureTreesSlider", value = plantation$params$crownHmin)
         updateSliderInput(session, "keepRandomFraction", value = plantation$params$keepRandomFraction)
+        updateSliderInput(session, "rigidness", value = plantation$params$rigidness)
+        updateSliderInput(session, "cloth_resolution", value = plantation$params$cloth_resolution)
+        updateSliderInput(session, "res", value = plantation$params$resCHM)
 
         if (!is.null(plantation$flas))
         {
@@ -225,7 +229,7 @@ server <- function(input, output, session)
 
     if (!is.null(file) && length(file) > 0)
     {
-      showNotification("Loading block layout")
+      showNotification("Loading Excel database")
 
       tryCatch({
         plantation$set_database(file)
@@ -285,6 +289,27 @@ server <- function(input, output, session)
     })
   })
 
+  # ===== OnClick loadTreeMapFileButton ====
+  observeEvent(input$loadTreeMapFileButton, {
+
+    file <- shinyFiles::parseFilePaths(volumes, input$loadTreeMapFileButton)$datapath
+
+    tryCatch({
+      showNotification("Loading tree plantation design")
+      plantation$set_layout(file)
+      update_file_table(runif(1))
+      update_state_table(runif(1))
+      update_tree_map(runif(1))
+      update_layout_map(runif(1))
+      update_preview_map(runif(1))
+    },
+    error = function(e)
+    {
+      popup_error(conditionMessage(e))
+    })
+  })
+
+
   # ===== OnClick smoothCHMButton ====
   observeEvent(input$smoothCHMButton, {
 
@@ -307,6 +332,12 @@ server <- function(input, output, session)
     showNotification("Aligning tree layout")
 
     tryCatch({
+      if (is.null(plantation$layout$tree_layout_oriented))  stop("Missing: tree layout")
+      if (is.null(plantation$schm)) stop("Missing: smooth CHM")
+      if (is.null(plantation$layout$origin)) stop("Missing: tree layout's origin")
+      if (is.null(plantation$layout$spacing)) stop("Missing: tree layout'$'s spacing")
+      if (is.null(plantation$boundaries)) stop("Missing: plantation boundaries")
+
       res = layout_alignment_angle(
         plantation$layout$tree_layout_oriented,
         plantation$schm,
@@ -442,7 +473,7 @@ server <- function(input, output, session)
          input$partternStartChoiceRadioButton,
          input$partternOrientationChoiceRadioButton),
     {
-      validate(need(!is.null(plantation$layout), "No block layout file selected yet"))
+      validate(need(!is.null(plantation$layout$tree_layout_raw), "No block layout file selected yet"))
 
       plantation$set_layout_parameter(
         input$blockSizeInput,
@@ -600,7 +631,7 @@ server <- function(input, output, session)
   # ==== update plot ====
   output$plantationLayoutImage <- renderPlot({
     update_layout_plot()
-    validate(need(!is.null(plantation$layout), "No block layout file selected yet"))
+    validate(need(!is.null(plantation$layout$tree_layout_raw), "No block layout file selected yet"))
     print(plantation$layout)
     plantation$layout$plot()
   })
