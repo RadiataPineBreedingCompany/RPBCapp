@@ -1,13 +1,19 @@
 #' @export
 layout_alignment_angle = function(layout, chm, pivot, ws, boundaries)
 {
+  #' layout = self$layout$tree_layout_oriented
+  #' chm = self$schm
+  #' pivot = self$layout$origin
+  #' ws = self$layout$spacing*0.75
+  #' boundaries = self$boundaries
+
   ttps = lidR::locate_trees(chm, lidR::lmf(ws))
   layout = remove_virtual_trees(layout)
   u = sf::st_contains(boundaries, ttps)
   ttps = ttps[u[[1]],]
 
   #terra::plot(self$schm)
-  #plot(ttps, add = T, cex = 0.25)
+  #plot(ttps$geometry, add = T, cex = 0.5)
 
   vref = sf::st_coordinates(ttps)
   vref = vref[,1:2]
@@ -65,9 +71,9 @@ layout_alignment_angle = function(layout, chm, pivot, ws, boundaries)
     rotated <- t(R %*% t(A0))
     transformed <- rotated + matrix(c(tx, ty), nrow(A), 2, byrow = TRUE)
 
-    if (FALSE)
+    if (TRUE)
     {
-      plot(B0, asp = 1)
+      plot(B0, asp = 1, main = paste(params))
       points(rotated, col = "blue")
       points(transformed, col ="red")
     }

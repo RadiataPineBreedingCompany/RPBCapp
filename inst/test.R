@@ -116,14 +116,18 @@ self$leaflet()
 conf = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/example_load_project/19BP01_ULS_subsampled.rpbc"
 lay = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/example_load_project/BC19BP01CKT_EstReport.xlsx"
 
+conf = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/BC66_1 Kinleith/BC66_1_Kinleith.rpbc"
+conf = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/BC55_2_Kaingaroa/BC55_2_Kaingaroa_2023_ULS.rpbc"
+
 block_size <- 18.6
 num_trees <- 6
 
 self = Plantation$new()
 self$read_config(conf)
+self$leaflet(trees = FALSE, schm = FALSE)
 self$layout$plot()
 self$set_crs(2193)
-self$layout$set_origin(1916419.46, 5738336.67)
+self$layout$set_origin(1917282.6277, 5735288.6283)
 res = layout_alignment_angle(self$layout$tree_layout_oriented, self$schm, self$layout$origin, self$layout$spacing*0.75, self$boundaries)
 res
 angle = res[1]
@@ -139,7 +143,7 @@ self$leaflet()
 
 self$adjust_layout(2)
 self$leaflet(dtm = FALSE)
-self$measure_trees(4.5)
+self$measure_trees(2.5)
 self$leaflet(dtm = FALSE, layout = FALSE)
 
 trees = self$trees

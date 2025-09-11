@@ -129,7 +129,7 @@ validate_tree = function(trees, plan, spacing, hmin)
   if (nrow(idx) > 0)
   {
     too_close = trees[idx[,1], ]
-    too_close = sf::st_buffer(idx, th)
+    too_close = sf::st_buffer(too_close, th)
     too_close$reason = "Too close"
   }
 
@@ -177,7 +177,7 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
   pos = sf::st_geometry(trees)
 
   nofound = trees$ApexFound == FALSE
-  virtual_trees = trees$Block < 0
+  virtual_trees = trees[[BLOCKNAME]] < 0
 
   # Handle extra trees required to buffer the segmentation
   id = 1:nrow(trees)
@@ -222,10 +222,10 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
 
   trees$TREEID = NULL
   pcrown$TREEID = NULL
-  pcrown$Block = trees$Block
-  pcrown$Tpos = trees$Tpos
-  pcrown$Prow = trees$Prow
-  pcrown$Pcol = trees$Pcol
+  pcrown[[BLOCKNAME]] = trees[[BLOCKNAME]]
+  pcrown[[TPOSNAME]] = trees[[TPOSNAME]]
+  pcrown[[ROWNAME]] = trees[[ROWNAME]]
+  pcrown[[COLNAME]] = trees[[COLNAME]]
 
   # Remove polygon for which with have no apex
   sf::st_geometry(pcrown)[pcrown$ApexFound == FALSE] <- sf::st_sfc(sf::st_geometrycollection(), crs = sf::st_crs(pcrown))
@@ -234,9 +234,9 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
   #trees$ApexFound = NULL
   pcrown$ApexFound = NULL
 
-  order <- c("Block", "Tpos", "Prow", "Pcol", "ApexFound", "TreeFound", "Height", "CrownArea", attr(trees, "sf_column"))
+  order <- c(LAYOUTNAMES, "ApexFound", "TreeFound", "Height", "CrownArea", attr(trees, "sf_column"))
   trees = trees[, order]
-  order <- c( "Block", "Tpos", "Prow", "Pcol", "Height", "CrownArea", attr(pcrown, "sf_column"))
+  order <- c(LAYOUTNAMES, "Height", "CrownArea", attr(pcrown, "sf_column"))
   pcrown = pcrown[, order]
 
   pcrown = pcrown[virtual_trees == FALSE,]

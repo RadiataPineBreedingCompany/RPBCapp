@@ -1,0 +1,9 @@
+BLOCKNAME = "Pset"
+ROWNAME = "Prow"
+COLNAME = "Pcol"
+TPOSNAME = "Tpos"
+TREESHEETNAMES = c("Linear File", "Sorted Linear File", "Design File")
+BLOCKSHEETNAMES = c("Linear Layout Map", "Linear Block Map", "Block Table")
+FAMILYCODENAMES = c("FamilyCode", "Family")
+CLONECODENAMES = c("CloneCode", "Clone")
+LAYOUTNAMES = c(BLOCKNAME, TPOSNAME, ROWNAME, COLNAME)

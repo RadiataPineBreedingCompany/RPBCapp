@@ -121,6 +121,8 @@ Plantation <- R6::R6Class("Plantation",
 
     set_boundaries = function(file, nowrite = FALSE)
     {
+      cat("Set Boundaries:", file, "\n")
+
       assert_file_exists(file)
 
       boundaries <- sf::st_read(file, quiet = TRUE)
@@ -200,11 +202,7 @@ Plantation <- R6::R6Class("Plantation",
 
       assert_file_exists(file)
 
-      sheet_name = "Sorted Linear File"
-      sheets <- readxl::excel_sheets(file)
-      if (!sheet_name %in% sheets)
-        stop(paste("Sheet", sheet_name, "does not exist in the Excel file"))
-
+      sheet_name <- xls_find_sheet(file, TREESHEETNAMES)
       self$database = readxl::read_excel(file, sheet = sheet_name)
       self$fdatabase = file
 
@@ -274,6 +272,8 @@ Plantation <- R6::R6Class("Plantation",
       self$crowns = sf::st_read(file, layer = "crowns", quiet = TRUE)
       self$fmeasurements = file
 
+      self$layout$tree_layout_adjusted = self$trees
+
       if (!nowrite)
         self$write_config()
     },
@@ -319,7 +319,9 @@ Plantation <- R6::R6Class("Plantation",
       spacing = self$layout$spacing
       echm[is.na(echm)] = 0
       self$layout$tree_layout_adjusted = relocate_trees(chm, echm, plan, spacing, hmin, progress)
-      self$layout_warnings = validate_tree(self$layout$tree_layout_adjusted, plan, spacing, hmin)
+
+      self$trees = self$layout$tree_layout_adjusted
+      self$layout_warnings = validate_tree(self$trees, plan, spacing, hmin)
 
       if (is.null(self$fdebug))
         self$fdebug = paste0(self$wd,  "/debug.gpkg")
@@ -330,6 +332,14 @@ Plantation <- R6::R6Class("Plantation",
       sf::st_write(self$layout_warnings$move, dsn = self$fdebug, layer = "moves", quiet = TRUE, append = FALSE)
       if (!is.null(self$layout_warnings$warn))
         sf::st_write(self$layout_warnings$warn, dsn = self$fdebug, layer = "warnings", quiet = TRUE, append = FALSE)
+
+      if (is.null(self$fmeasurements))
+        self$fmeasurements = paste0(self$wd,  "/tree_measurements.gpkg")
+
+      if (file.exists(self$fmeasurements))
+        file.remove(self$fmeasurements)
+
+      sf::st_write(self$trees, dsn = self$fmeasurements, layer = "trees", quiet = TRUE, append = FALSE)
 
       self$params$treesHmin = hmin
       self$write_config()
@@ -458,7 +468,7 @@ Plantation <- R6::R6Class("Plantation",
       data.frame(
         Object = object_names,
         Type = object_types,
-        Path = short_path(file_paths, 50),
+        Path = file_paths,
         stringsAsFactors = FALSE
       )
     },
@@ -513,13 +523,13 @@ Plantation <- R6::R6Class("Plantation",
         ggplot2::theme_bw()
 
       out[[3]] = ggplot2::ggplot(trees) +
-        ggplot2::aes(x = as.factor(Block), y = Height, fill = as.factor(Block)) +
+        ggplot2::aes(x = .data[[BLOCKNAME]], y = Height, fill = as.factor(.data[[BLOCKNAME]])) +
         ggplot2::geom_boxplot(outlier.shape = NA, alpha = 0.7) +
         ggplot2::theme_bw() +
         ggplot2::guides(fill = "none") +
         ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)) +
         ggplot2::scale_x_discrete(
-          breaks = levels(as.factor(trees$Block))[seq(1, length(unique(trees$Block)), 5)]
+          breaks = levels(as.factor(trees[[BLOCKNAME]]))[seq(1, length(unique(trees[[BLOCKNAME]])), 5)]
         ) +
         ggplot2::labs(
           title = "Height Distribution by Block",
@@ -528,40 +538,47 @@ Plantation <- R6::R6Class("Plantation",
           fill = "Block"
         )
 
-      if (!is.null(trees$CloneCode))
+      code_var <- intersect(FAMILYCODENAMES, names(trees))[1]
+      if (!is.na(code_var))
       {
-        # Height vs CloneCode
-        out[[4]] =  ggplot2::ggplot(trees) +
-          ggplot2::aes(x = as.factor(CloneCode), y = Height, fill = as.factor(CloneCode), col = as.factor(CloneCode)) +
+        out[[4]] <- ggplot2::ggplot(trees) +
+          ggplot2::aes(
+            x = as.factor(.data[[code_var]]),
+            y = Height,
+            fill = as.factor(.data[[code_var]]),
+            col  = as.factor(.data[[code_var]])
+          ) +
           ggplot2::geom_boxplot(outlier.shape = NA, alpha = 0.7) +
           ggplot2::theme_bw() +
           ggplot2::guides(fill = "none", col = "none") +
-          ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)) +
+          ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 90, hjust = 1)) +
           ggplot2::labs(
-            title = "Height Distribution by Clone Code",
-            x = "Clone Code",
-            y = "Height (m)",
-            fill = "Clone Code"
+            title = paste("Height Distribution by", code_var),
+            x     = code_var,
+            y     = "Height (m)",
+            fill  = code_var
           )
       }
 
-      if (!is.null(trees$FamilyCode))
+      code_var <- intersect(CLONECODENAMES, names(trees))[1]
+      if (!is.na(code_var))
       {
-        # Height vs FamilyCode
-        out[[5]] = ggplot2::ggplot(trees) +
-          ggplot2::aes(x = as.factor(FamilyCode), y = Height, fill = as.factor(FamilyCode)) +
+        out[[4]] <- ggplot2::ggplot(trees) +
+          ggplot2::aes(
+            x = as.factor(.data[[code_var]]),
+            y = Height,
+            fill = as.factor(.data[[code_var]]),
+            col  = as.factor(.data[[code_var]])
+          ) +
           ggplot2::geom_boxplot(outlier.shape = NA, alpha = 0.7) +
           ggplot2::theme_bw() +
-          ggplot2::guides(fill = "none")+
-          ggplot2::scale_x_discrete(
-            breaks = levels(as.factor(trees$FamilyCode))[seq(1, length(unique(trees$FamilyCode)), 5)]
-          ) +
-          ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)) +
+          ggplot2::guides(fill = "none", col = "none") +
+          ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 90, hjust = 1)) +
           ggplot2::labs(
-            title = "Height Distribution by Family Code",
-            x = "Family Code",
-            y = "Height (m)",
-            fill = "Family Code"
+            title = paste("Height Distribution by", code_var),
+            x     = code_var,
+            y     = "Height (m)",
+            fill  = code_var
           )
       }
 
@@ -653,10 +670,20 @@ Plantation <- R6::R6Class("Plantation",
     {
       if (!is.null(self$trees) & !is.null(self$fdatabase))
       {
-        db = readxl::read_excel(self$fdatabase, sheet = "Sorted Linear File")
-        names(db)[names(db) == "Pset(Block)"] <- "Block"
-        self$trees = merge(db, self$trees, by = c("Tpos", "Block", "Prow", "Pcol"), all.x = TRUE)
-        self$trees = sf::st_as_sf(self$trees)
+        sheet_name <- xls_find_sheet(self$fdatabase, TREESHEETNAMES)
+        db = readxl::read_excel(self$fdatabase, sheet = sheet_name)
+
+        names(db)[names(db) == "Pset(Block)"] <- BLOCKNAME
+
+        tmp = merge(self$trees, db, by = c(TPOSNAME, BLOCKNAME, ROWNAME, COLNAME), all.x = TRUE)
+
+        # Reorder: first all original `trees` columns, then the new ones from `db`
+        tree_cols <- names(self$trees)
+        db_cols   <- setdiff(names(tmp), tree_cols)
+        tmp <- tmp[c(db_cols, tree_cols)]
+        tmp = sf::st_as_sf(tmp)
+
+        self$trees = tmp
       }
     },
 
@@ -701,6 +728,11 @@ Plantation <- R6::R6Class("Plantation",
         if (!is.null(self$schm))self$schm = terra::mask(self$schm, bound)
         if (!is.null(self$las)) self$las  = lidR::clip_roi(self$las, sf::st_as_sf(bound))
       }
+    },
+
+    is_adjusted = function()
+    {
+      return(!is.null(self$trees))
     },
 
     leaflet = function(edit = NULL, dtm = TRUE, chm = TRUE, schm = TRUE, bbox = TRUE, trees = TRUE, layout = TRUE)
@@ -804,8 +836,8 @@ Plantation <- R6::R6Class("Plantation",
           reason = self$layout_warnings$warn$reason
           pal <- leaflet::colorFactor(palette = c('yellow', 'green'), domain = reason)
 
-          data = sf::st_transform(self$trees, 4326)
-          map = map |> leaflet::addPolygons(data = sf::st_transform(self$layout_warnings$warn, 4326), opacity = 0.9, group = "Warnings", color = ~pal(reason), fill = FALSE, weight = 3)
+          data = sf::st_transform(self$layout_warnings$warn, 4326)
+          map = map |> leaflet::addPolygons(data = data, opacity = 0.9, group = "Warnings", color = ~pal(reason), fill = FALSE, weight = 3)
           overlayGroups = c(overlayGroups, "Warnings")
 
           map = map |>
@@ -1080,7 +1112,10 @@ Plantation <- R6::R6Class("Plantation",
       }
       if (!is.null(config$measurements))
       {
-        self$set_measurements(config$measurements$file, nowrite = TRUE)
+        if (!is.null(config$measurements$file))
+          self$set_measurements(config$measurements$file, nowrite = TRUE)
+        self$params$crownsHmin = config$measurements$crownsHmin
+        self$params$treesHmin = config$measurements$treesHmin
       }
       if (!is.null(config$debug))
       {
@@ -1230,28 +1265,4 @@ assert_file_ext <- function(file, expected_ext) {
     ), call. = FALSE)
   }
   invisible(TRUE)
-}
-
-short_path <- function(paths, max_chars = 40) {
-  sapply(paths, function(p) {
-    if (is.na(p)) return(NA)
-    # Short path is ok as is
-    if (nchar(p) <= max_chars) return(p)
-
-    comps <- strsplit(p, .Platform$file.sep)[[1]]
-    n <- length(comps)
-    if (n <= 2) return(p)
-
-    first <- paste(comps[1:(n-1)], collapse = .Platform$file.sep) # keep most of start
-    last <- comps[n]  # filename
-    # Truncate first if still too long
-    total_len <- nchar(first) + nchar(last) + nchar("[...]") + 2  # 2 for separators
-    if (total_len > max_chars) {
-      # keep only first N chars from start
-      keep <- max_chars - nchar(last) - nchar("[...]") - 2
-      first <- substr(first, 1, keep)
-    }
-
-    paste0(first, .Platform$file.sep, "[...]", .Platform$file.sep, last)
-  }, USE.NAMES = FALSE)
 }

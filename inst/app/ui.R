@@ -272,7 +272,7 @@ ui <- page_navbar(
         width = 300,
         wellPanel(
           tags$p("Once the trees are detected run tree measurement"),
-          sliderInput("hminMeasureTreesSlider", "Minimal height", min = 0, max = 10, value = 2, step = 0.25),
+          sliderInput("hminMeasureTreesSlider", "Minimal height", min = 0, max = 10, value = 4.5, step = 0.25),
           actionButton("runMeasurementButton", "Measure trees")
         )
       ),

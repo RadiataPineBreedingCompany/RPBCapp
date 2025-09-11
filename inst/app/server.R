@@ -20,6 +20,31 @@ popup_error = function(msg)
   )
 }
 
+short_path <- function(paths, max_chars = 40) {
+  sapply(paths, function(p) {
+    if (is.na(p)) return(NA)
+    # Short path is ok as is
+    if (nchar(p) <= max_chars) return(p)
+
+    comps <- strsplit(p, .Platform$file.sep)[[1]]
+    n <- length(comps)
+    if (n <= 2) return(p)
+
+    first <- paste(comps[1:(n-1)], collapse = .Platform$file.sep) # keep most of start
+    last <- comps[n]  # filename
+    # Truncate first if still too long
+    total_len <- nchar(first) + nchar(last) + nchar("[...]") + 2  # 2 for separators
+    if (total_len > max_chars) {
+      # keep only first N chars from start
+      keep <- max_chars - nchar(last) - nchar("[...]") - 2
+      first <- substr(first, 1, keep)
+    }
+
+    paste0(first, .Platform$file.sep, "[...]", .Platform$file.sep, last)
+  }, USE.NAMES = FALSE)
+}
+
+
 selectCRSModalDialog = function()
 {
   modalDialog(
@@ -156,8 +181,8 @@ server <- function(input, output, session)
 
         updateSliderInput(session, "smoothCHM", value = plantation$params$smoothCHM)
         updateSliderInput(session, "smoothPasses", value = plantation$params$smoothPasses)
-        updateSliderInput(session, "hminAdjustTreesSlider", value = plantation$params$treeHmin)
-        updateSliderInput(session, "hminMeasureTreesSlider", value = plantation$params$crownHmin)
+        updateSliderInput(session, "hminAdjustTreesSlider", value = plantation$params$treesHmin)
+        updateSliderInput(session, "hminMeasureTreesSlider", value = plantation$params$crownsHmin)
         updateSliderInput(session, "keepRandomFraction", value = plantation$params$keepRandomFraction)
         updateSliderInput(session, "rigidness", value = plantation$params$rigidness)
         updateSliderInput(session, "cloth_resolution", value = plantation$params$cloth_resolution)
@@ -240,6 +265,7 @@ server <- function(input, output, session)
           input$partternOrientationChoiceRadioButton)
         update_file_table(runif(1))
         update_layout_plot(runif(1))
+        update_preview_map(runif(1))
       },
       error = function(e)
       {
@@ -391,9 +417,15 @@ server <- function(input, output, session)
     hmin = isolate(input$hminMeasureTreesSlider)
 
     tryCatch({
+
+      if (!plantation$is_adjusted())
+        stop("Tree location not found yet. Please run tree localisation first (tab 4)")
+
       withProgress(message = 'Tree measurement', value = 0, {
         plantation$measure_trees(hmin, progress = incProgress)
       })
+
+      update_file_table(runif(1))
       update_tree_map(runif(1))
       update_state_table(runif(1))
       update_stats_ui(runif(1))
@@ -592,15 +624,33 @@ server <- function(input, output, session)
   output$mapPreview <- leaflet::renderLeaflet({
     showNotification("Updating preview map")
     update_preview_map()
-    plantation$leaflet()
+    plantation$leaflet(trees = FALSE, schm = FALSE)
   })
 
   # ===== update table ====
   output$fileTable <- DT::renderDT({
     update_file_table()
     files_df = plantation$get_file_table()
+    files_df$Path = short_path(files_df$Path, 50)
     na.omit(files_df)
   }, options = list(dom = 't', pageLength = 100))
+
+  # Modal to show full path when row clicked
+  observeEvent(input$fileTable_rows_selected,
+  {
+    selected_row <- input$fileTable_rows_selected
+    if (length(selected_row) == 0) return()
+
+    files_df <- plantation$get_file_table()
+    full_path <- files_df$Path[selected_row]
+
+    showModal(modalDialog(
+      title = paste("Full path for row", selected_row),
+      full_path,
+      easyClose = TRUE,
+      footer = NULL
+    ))
+  })
 
   output$stateTable <- DT::renderDT({
     update_state_table()
@@ -622,11 +672,65 @@ server <- function(input, output, session)
 
     DT::datatable(
       df,
+      selection = "single",
       escape = FALSE,   # allow HTML icons
       rownames = FALSE,
       options = list(dom = 't', pageLength = 100)
     )
   })
+
+  observeEvent(input$stateTable_rows_selected,
+  {
+    selected_row <- input$stateTable_rows_selected
+    if (length(selected_row) == 0) return()
+
+    # Pick the object based on row index
+    out <- switch(selected_row,
+                  plantation$chm,
+                  plantation$schm,
+                  plantation$layout$tree_layout_oriented,
+                  plantation$trees,
+                  plantation$crowns
+    )
+
+    # Show modal depending on type
+    if (inherits(out, "SpatRaster"))
+    {
+      showModal(modalDialog(
+        title = paste("Raster for row", selected_row),
+        verbatimTextOutput("modalRasterText"),
+        easyClose = TRUE,
+        footer = NULL
+      ))
+
+      output$modalRasterText <- renderPrint({print(out)})
+
+    }
+    else if (inherits(out, "sf") || is.data.frame(out))
+    {
+      showModal(modalDialog(
+        title = paste("Table for row", selected_row),
+        div(
+          style = "overflow-y: auto; max-height: 1000px; max-width: 1000px",
+          DT::renderDT(out, options = list(pageLength = 10, scrollX = TRUE, scrollY = "500px"))
+        ),
+        easyClose = TRUE,
+        footer = NULL,
+        size = "l"  # large modal
+      ))
+    }
+    else
+    {
+      showModal(modalDialog(
+        title = "Unsupported type",
+        paste("Cannot display object of class:", class(out)),
+        easyClose = TRUE,
+        footer = NULL
+      ))
+    }
+  })
+
+
 
   # ==== update plot ====
   output$plantationLayoutImage <- renderPlot({

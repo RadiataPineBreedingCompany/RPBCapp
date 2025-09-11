@@ -30,7 +30,7 @@ RPBCLayout <- R6::R6Class("Plantation",
     # or can be read from a shape file. If read from the Excel database what we read is actually
     # the block layout. From the block layout we can compute the tree position with build_layout().
     # However we already have the tree position if read from a geospatial database.
-    read_layout = function(file, sheet_name = "Linear Layout Map")
+    read_layout = function(file)
     {
       cat("Read layout:", file, "\n")
 
@@ -38,11 +38,17 @@ RPBCLayout <- R6::R6Class("Plantation",
 
       if (ext %in% c("xls", "xlsx"))
       {
-        sheets <- readxl::excel_sheets(file)
-        if (!sheet_name %in% sheets)
-          stop(paste("Sheet", sheet_name, "does not exist in the Excel file"))
+        sheet_name = xls_find_sheet(file, BLOCKSHEETNAMES)
+        block_layout_table = readxl::read_excel(file, sheet = sheet_name)
 
-        self$block_layout_table = readxl::read_excel(file, sheet = sheet_name)
+        expected_columns = c("BlockID", "BlockRow", "BlockCol")
+        if (!all(expected_columns %in% names(block_layout_table)))
+        {
+          msg = paste0("Reading ", basename(file), ", sheet ", sheet_name, ". Expected column names 'BlockID', 'BlockRow', 'BlockCol' but found '", paste0(u, collapse = "' '"), "'.")
+          stop(msg)
+        }
+
+        self$block_layout_table = block_layout_table
       }
       else if (ext %in% c("shp", "gpkg"))
       {
@@ -50,8 +56,8 @@ RPBCLayout <- R6::R6Class("Plantation",
 
         assert_sf_point(layout)
 
-        if (any(!c("Tpos", "Block", "Prow", "Pcol") %in% names(layout)))
-          stop("The tree layout must have attributes named 'Tpos', 'Block', 'Prow' and 'Pcol'")
+        if (any(!c(TPOSNAME, BLOCKNAME, ROWNAME, COLNAME) %in% names(layout)))
+          stop(paste0("The tree layout must have attributes named '", TPOSNAME, "' '", BLOCKNAME, "' '", ROWNAME, "' '", COLNAME, "'"))
 
         # Estimate spacing
         d = sf::st_coordinates(layout)
@@ -59,7 +65,7 @@ RPBCLayout <- R6::R6Class("Plantation",
         d = d$nn.dists[,-1]
         self$spacing = stats::median(d)
 
-        self$tree_layout_oriented = layout[,c("Tpos", "Block", "Prow", "Pcol")]
+        self$tree_layout_oriented = layout[, c(TPOSNAME, BLOCKNAME, ROWNAME, COLNAME)]
         self$block_layout_raw = self$tree_layout_oriented
         self$from_geodatabase = TRUE
       }
@@ -150,7 +156,7 @@ RPBCLayout <- R6::R6Class("Plantation",
       cols[block_layout$BlockID < 0] = "gray95"
       plot(sf::st_geometry(block_layout), axes = TRUE, main = "Block and tree pattern", border = cols)
 
-      blk = split(tree_layout, tree_layout$Block)
+      blk = split(tree_layout, tree_layout[[BLOCKNAME]])
       blk[["-1"]] = NULL
       lines_list <- lapply(blk, function(block) {
         sf::st_cast(sf::st_combine(block), "LINESTRING")
@@ -160,13 +166,12 @@ RPBCLayout <- R6::R6Class("Plantation",
 
       cols <- sf::sf.colors(nlevels(as.factor(tree_layout$Tpos)))
       cols <- cols[as.factor(tree_layout$Tpos)]
-      cols[tree_layout$Block < 0] = "gray"
+      cols[tree_layout[[BLOCKNAME]] < 0] = "gray"
 
       plot(sf::st_geometry(tree_layout), add = T, pch = 19, cex = 0.25, col = cols)
     }
   )
 )
-
 
 rotation <- function(a)
 {
@@ -174,7 +179,6 @@ rotation <- function(a)
   matrix(c(cos(r), sin(r), -sin(r), cos(r)), nrow = 2, ncol = 2)
 }
 
-#' @export
 rotate_sf <- function(x, theta, center = c(0,0))
 {
   rot <- rotation(theta)
@@ -186,7 +190,6 @@ rotate_sf <- function(x, theta, center = c(0,0))
   sf::st_set_geometry(x, rotated)
 }
 
-#' @export
 generate_blocks <- function(block_layout, block_size)
 {
   # Add extra buffer block
@@ -227,7 +230,7 @@ generate_trees = function(block_layout, block_size, num_trees, start, orientatio
   {
     block = generate_snake_coords(num_trees, block_centers[i,1], block_centers[i,2], block_size/num_trees, start = start, orientation = orientation)
     block = sf::st_as_sf(block, coords = c("x", "y"))
-    block$Block = block_centers[i,3]
+    block[[BLOCKNAME]] = block_centers[i,3]
     block
   })
   tree_layout = do.call(rbind, tree_layout)
