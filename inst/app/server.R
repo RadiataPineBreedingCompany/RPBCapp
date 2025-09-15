@@ -364,8 +364,8 @@ server <- function(input, output, session)
       if (is.null(plantation$layout$spacing)) stop("Missing: tree layout'$'s spacing")
       if (is.null(plantation$boundaries)) stop("Missing: plantation boundaries")
 
-      res = layout_alignment_angle(
-        plantation$layout$tree_layout_oriented,
+      res = layout_alignment_lm(
+        plantation$layout$tree_layout_raw,
         plantation$schm,
         plantation$layout$origin,
         plantation$layout$spacing*0.75,
@@ -578,6 +578,8 @@ server <- function(input, output, session)
     p <- sf::st_sfc(sf::st_point(c(click$lng, click$lat)), crs = 4326)
     p <- sf::st_transform(p, 2193)
     coords <- as.numeric(sf::st_coordinates(p))
+
+    print(paste0("Click = c(", paste0(coords, collapse = ", "), ")"))
 
     # Get plantation if needed
     if (is.null(plantation$layout))

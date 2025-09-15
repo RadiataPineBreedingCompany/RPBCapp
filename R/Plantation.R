@@ -125,7 +125,35 @@ Plantation <- R6::R6Class("Plantation",
 
       assert_file_exists(file)
 
-      boundaries <- sf::st_read(file, quiet = TRUE)
+      if (tools::file_ext(file) %in% c("xls", "xlsx"))
+      {
+        sheet_name <- xls_find_sheet(file, BOUNDARYSHEETNAMES)
+        boundaries = readxl::read_excel(file, sheet = sheet_name)
+
+        # Case when the sheet contains a screenshoot of coordinates
+        if (nrow(boundaries) == 0)
+        {
+          warning(paste0("'", sheet_name, "' Excel sheet found but contains no data"))
+          return()
+        }
+
+        long = df_find_column(boundaries, LONGITUDECOLNAMES, mustWork = FALSE)
+        lat = df_find_column(boundaries, LATITUDECOLNAMES, mustWork = FALSE)
+        long = boundaries[[long]]
+        lat = boundaries[[lat]]
+        boundaries = cbind(long, lat)
+        boundaries = rbind(boundaries, boundaries[1,])
+        boundaries = sf::st_polygon(list(boundaries))
+        boundaries = sf::st_sfc(boundaries)
+        sf::st_crs(boundaries) = 4326
+        valid = sf::st_is_valid(boundaries)
+        if (!valid)
+          stop("The polygon read from the Excel file is not valid")
+      }
+      else
+      {
+        boundaries <- sf::st_read(file, quiet = TRUE)
+      }
 
       assert_sf_polygon(boundaries)
 
@@ -202,11 +230,18 @@ Plantation <- R6::R6Class("Plantation",
 
       assert_file_exists(file)
 
+      # Load the tree data base. A table with all the trees.
       sheet_name <- xls_find_sheet(file, TREESHEETNAMES)
       self$database = readxl::read_excel(file, sheet = sheet_name)
       self$fdatabase = file
 
+      # Load the block layout to build the tree map
       self$set_layout(file, nowrite)
+
+      # Load the boundaries of the plantation if it exists
+      sheet_name <- xls_find_sheet(file, BOUNDARYSHEETNAMES, mustWork = FALSE)
+      if (!is.null(sheet_name))
+        self$set_boundaries(file)
 
       if (!nowrite)
         self$write_config()
@@ -254,6 +289,9 @@ Plantation <- R6::R6Class("Plantation",
           origin = c(bb[1], bb[2])
         } else if (!is.null(self$dtm)) {
           bb = sf::st_bbox(self$dtm)
+          origin = c(bb[1], bb[2])
+        } else if (!is.null(self$bbox)) {
+          bb = sf::st_bbox(self$bbox)
           origin = c(bb[1], bb[2])
         }
 
@@ -644,6 +682,9 @@ Plantation <- R6::R6Class("Plantation",
 
     compute_chm = function(res = 0.1)
     {
+      if (is.null(self$dtm))
+        stop("DTM is missing. Cannot compute the CHM")
+
       assert_point_cloud_loaded(self$las)
 
       chm = lidR::rasterize_canopy(self$las, res)
@@ -1224,6 +1265,7 @@ Plantation <- R6::R6Class("Plantation",
       list(
         CHM = !is.null(self$chm),
         sCHM = !is.null(self$schm),
+        Boudaries = !is.null(self$boundaries),
         Layout = !is.null(self$layout),
         Trees = !is.null(self$trees),
         Crowns = !is.null(self$crowns)

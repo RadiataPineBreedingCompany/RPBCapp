@@ -7,7 +7,7 @@ remove_virtual_trees = function(data)
   data[data[[str]] >= 0,]
 }
 
-xls_find_sheet = function(file, valid_sheet_names)
+xls_find_sheet = function(file, valid_sheet_names, mustWork = TRUE)
 {
   sheet_names <- readxl::excel_sheets(file)
   lc_sheet_names = tolower(sheet_names)
@@ -16,12 +16,40 @@ xls_find_sheet = function(file, valid_sheet_names)
   res = match(lc_valid_sheet_names, lc_sheet_names)
   res = na.omit(res)
 
-  if (length(res) == 0)
+  if (length(res) == 0 & mustWork)
   {
     msg = paste(valid_sheet_names, collapse = "' or '")
     stop(paste0("Excel sheet '", msg, "' not found in the Excel file", collapse = " "))
   }
 
+  if (length(res) == 0 & !mustWork)
+  {
+    return(NULL)
+  }
+
   res = res[1]
   return(sheet_names[res])
+}
+
+df_find_column = function(df, valid_col_names, mustWork = TRUE)
+{
+  col_names <- colnames(df)
+  lc_col_names <- tolower(col_names)
+  lc_valid_col_names <- tolower(valid_col_names)
+
+  res <- match(lc_valid_col_names, lc_col_names)
+  res <- na.omit(res)
+
+  if (length(res) == 0 && mustWork)
+  {
+    msg <- paste(valid_col_names, collapse = "' or '")
+    stop(paste0("Column '", msg, "' not found in the data frame"))
+  }
+
+  if (length(res) == 0 && !mustWork) {
+    return(NULL)
+  }
+
+  res <- res[1]
+  return(col_names[res])
 }

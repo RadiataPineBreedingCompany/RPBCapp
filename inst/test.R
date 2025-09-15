@@ -182,3 +182,58 @@ self$set_layout_parameter(block_size, num_trees, start = "bl", orientation = "v"
 self$leaflet()
 self$adjust_layout(2)
 self$measure_trees(4)
+
+
+flas = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/19BP01/19BP01_ULS.las"
+fdb = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/19BP01/BC19BP01CKT_EstReport.xlsx"
+fbnd =  "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/19BP01/BP19area.shp"
+
+block_size <- 18.6
+num_trees <- 6
+self = Plantation$new()
+self$set_cloud(flas)
+self$crs$Name
+self$set_database(fdb)
+self$set_layout_parameter(block_size, num_trees, "bl", "v")
+self$crs$Name
+self$layout$tree_layout_oriented
+self$leaflet()
+self$read_cloud(0.05)
+self$classify_ground()
+self$compute_terrain()
+self$compute_chm()
+self$smooth_chm()
+self$set_boundaries()
+self$layout$set_origin(1916419.46, 5738336.67)
+angle = layout_alignment_angle(self$layout$tree_layout_raw, self$schm, self$layout$origin, self$layout$spacing*0.75, self$boundaries)
+angle = res[1]
+tx = res[2]
+ty = res[3]
+origin = self$layout$origin
+origin[1] = origin[1] + tx
+origin[2] = origin[2] + ty
+self$layout$set_angle(-angle)
+self$layout$set_origin(origin[1], origin[2])
+self$leaflet()
+
+
+conf = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/19BP01/19BP01.rpbc"
+conf = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/BC66_1 Kinleith/BC66_1_Kinleith_2023.rpbc"
+self = Plantation$new()
+self$read_config(conf)
+self$layout$set_angle(0)
+self$layout$set_origin(1916419.46, 5738336.67)
+self$layout$set_origin(1867580.13, 5756370.033)
+self$leaflet()
+res = layout_alignment_angle(self$layout$tree_layout_raw, self$schm, self$layout$origin, self$layout$spacing*0.75, self$boundaries)
+res
+angle = res[1]
+tx = res[2]
+ty = res[3]
+origin = self$layout$origin
+self$leaflet()
+origin[1] = origin[1] + tx
+origin[2] = origin[2] + ty
+self$layout$set_angle(-angle)
+self$layout$set_origin(origin[1], origin[2])
+self$leaflet()

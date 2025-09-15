@@ -126,11 +126,12 @@ RPBCLayout <- R6::R6Class("Plantation",
 
       angle = self$angle
       translate = self$origin
-      offset = self$spacing/2
-      translate = translate - c(offset, offset)
+      tree_zero = as.numeric(sf::st_coordinates(sf::st_geometry(self$tree_layout_raw)[1]))
+      offset = tree_zero
+      translate = translate - offset
 
-      self$block_layout_oriented <- rotate_sf(self$block_layout_raw, angle, c(offset, offset))
-      self$tree_layout_oriented <- rotate_sf(self$tree_layout_raw, angle, c(offset, offset))
+      self$block_layout_oriented <- rotate_sf(self$block_layout_raw, angle, offset)
+      self$tree_layout_oriented <- rotate_sf(self$tree_layout_raw, angle, offset)
 
       shift = sf::st_sfc(sf::st_point(translate))
       self$block_layout_oriented = sf::st_set_geometry(self$block_layout_oriented, sf::st_geometry(self$block_layout_oriented) + shift)
@@ -138,7 +139,7 @@ RPBCLayout <- R6::R6Class("Plantation",
 
       self$set_crs(crs)
       #plot(self$tree_layout_raw$geometry, col = "red", axes = T)
-      #plot(self$tree_layout$geometry, col = "blue", add = T)
+      #plot(self$tree_layout_oriented$geometry, col = "blue")
     },
 
     plot = function(show_buffer_block = FALSE)
@@ -169,6 +170,11 @@ RPBCLayout <- R6::R6Class("Plantation",
       cols[tree_layout[[BLOCKNAME]] < 0] = "gray"
 
       plot(sf::st_geometry(tree_layout), add = T, pch = 19, cex = 0.25, col = cols)
+
+      tree_zero = sf::st_geometry(tree_layout)[1]
+      plot(tree_zero, add = T, pch = 19, cex = 1, col = "red")
+
+      graphics::legend("topright", "Tree zero (block 1, tree 1)", pch = 19, col = "red")
     }
   )
 )
