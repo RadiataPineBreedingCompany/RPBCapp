@@ -11,6 +11,7 @@ Plantation <- R6::R6Class("Plantation",
     fdatabase = NULL,
     fboundaries = NULL,
     fdebug = NULL,
+    fplan = NULL,
     fdtm = NULL,
     fchm = NULL,
     fschm = NULL,
@@ -119,26 +120,48 @@ Plantation <- R6::R6Class("Plantation",
         self$write_config()
     },
 
+    # Read the boundaries from file
     set_boundaries = function(file, nowrite = FALSE)
     {
       cat("Set Boundaries:", file, "\n")
 
       assert_file_exists(file)
 
+      # If the input file is an excel file, try to read the boundaries from
+      # one of the sheet
       if (tools::file_ext(file) %in% c("xls", "xlsx"))
       {
-        sheet_name <- xls_find_sheet(file, BOUNDARYSHEETNAMES)
+        # Find a sheet with a valid sheet name
+        sheet_name <- xls_find_sheet(file, BOUNDARYSHEETNAMES, mustWork = FALSE)
+
+        # The sheet is missing. We do not have boundaries
+        if (is.null(sheet_name))
+        {
+          return(NULL)
+        }
+
+        # Read the content of the sheet
         boundaries = readxl::read_excel(file, sheet = sheet_name)
 
-        # Case when the sheet contains a screenshoot of coordinates
+        # Case when the sheet contains a screenshoot of coordinates...
         if (nrow(boundaries) == 0)
         {
           warning(paste0("'", sheet_name, "' Excel sheet found but contains no data"))
-          return()
+          return(NULL)
         }
 
+        message("Detection of an Excel sheet with the boundaries")
+
+        # Now we can try to read the long lat coordinates. Failure is allowed. Then no boundaries
         long = df_find_column(boundaries, LONGITUDECOLNAMES, mustWork = FALSE)
         lat = df_find_column(boundaries, LATITUDECOLNAMES, mustWork = FALSE)
+
+        if (is.null(long) | is.null(lat))
+        {
+          warning(paste0("'", sheet_name, "' Excel sheet found but no long lat data"))
+          return(NULL)
+        }
+
         long = boundaries[[long]]
         lat = boundaries[[lat]]
         boundaries = cbind(long, lat)
@@ -146,12 +169,19 @@ Plantation <- R6::R6Class("Plantation",
         boundaries = sf::st_polygon(list(boundaries))
         boundaries = sf::st_sfc(boundaries)
         sf::st_crs(boundaries) = 4326
+        boundaries = sf::st_make_valid(boundaries)
         valid = sf::st_is_valid(boundaries)
+
         if (!valid)
-          stop("The polygon read from the Excel file is not valid")
+        {
+          stop(paste0("The polygon read from the Excel in sheet '", sheet_name, "' is not valid"))
+        }
+
+        # Yay!! we have a boundary!
       }
       else
       {
+        # It is shapefile or geopackage
         boundaries <- sf::st_read(file, quiet = TRUE)
       }
 
@@ -173,6 +203,7 @@ Plantation <- R6::R6Class("Plantation",
         self$write_config()
     },
 
+    # Read the CHM from file
     set_chm = function(file, nowrite = FALSE)
     {
       cat("Set CHM:", file, "\n")
@@ -190,6 +221,7 @@ Plantation <- R6::R6Class("Plantation",
         self$write_config()
     },
 
+    # Read the DTM from file
     set_dtm = function(file, nowrite = FALSE)
     {
       cat("Set DTM:", file, "\n")
@@ -207,6 +239,7 @@ Plantation <- R6::R6Class("Plantation",
         self$write_config()
     },
 
+    # Read the smooth CHM from file
     set_schm = function(file, nowrite = FALSE)
     {
       cat("Set sCHM:", file, "\n")
@@ -224,24 +257,36 @@ Plantation <- R6::R6Class("Plantation",
         self$write_config()
     },
 
-    set_database = function(file, nowrite = TRUE)
+    # Read an Excel database
+    set_database = function(file, nowrite = FALSE)
     {
       cat("Set database:", file, "\n")
 
       assert_file_exists(file)
 
-      # Load the tree data base. A table with all the trees.
-      sheet_name <- xls_find_sheet(file, TREESHEETNAMES)
-      self$database = readxl::read_excel(file, sheet = sheet_name)
+      # Load the tree data base. A table with all the trees. It MUST exist
+      sheet_name <- xls_find_sheet(file, TREESHEETNAMES, mustWork = TRUE)
+      database = readxl::read_excel(file, sheet = sheet_name)
+
+      # Fix the standard
+      names(db)[names(db) == "Pset(Block)"] <- BLOCKNAME
+
+      # Assert standard validity
+      df_find_column(database, BLOCKNAME, mustWork = TRUE)
+      df_find_column(database, TPOSNAME,  mustWork = TRUE)
+
+      self$database = database
       self$fdatabase = file
 
       # Load the block layout to build the tree map
-      self$set_layout(file, nowrite)
+      self$set_layout(file, nowrite = nowrite)
 
       # Load the boundaries of the plantation if it exists
       sheet_name <- xls_find_sheet(file, BOUNDARYSHEETNAMES, mustWork = FALSE)
       if (!is.null(sheet_name))
-        self$set_boundaries(file)
+      {
+        self$set_boundaries(file, nowrite = nowrite)
+      }
 
       if (!nowrite)
         self$write_config()
@@ -271,17 +316,18 @@ Plantation <- R6::R6Class("Plantation",
       if (is.null(self$layout))
         stop("No 'layout' object yet. Read and Excel file first")
 
-      stopifnot(!is.na(block_size), !is.na(num_trees), !is.na(start[1]), !is.na(orientation))
+      print(block_size)
+      stopifnot(!anyNA(block_size), !is.na(num_trees), !is.na(start[1]), !is.na(orientation))
 
+      # Construction of the layout
       self$layout$build_layout(block_size, num_trees, start = start, orientation = orientation)
-
       self$layout$set_crs(self$crs)
 
+      # The layout is originally at (0,0). Find an arbitrary origin such as it is visible on the map.
       if (all(self$layout$origin == c(0,0)))
       {
         origin = c(0,0)
-        if (!is.null(self$boundaries))
-        {
+        if (!is.null(self$boundaries)) {
           bb = sf::st_bbox(self$boundaries)
           origin = c(bb[1], bb[2])
         } else if (!is.null(self$chm)) {
@@ -296,6 +342,44 @@ Plantation <- R6::R6Class("Plantation",
         }
 
         self$layout$set_origin(origin[1], origin[2])
+      }
+
+      # Combine the layout with the database that contains among other
+      # the Clone code and Family code of each tree.
+      self$layout$tree_layout_raw = self$joint_database(self$layout$tree_layout_raw)
+
+      # Maybe the tree layout contains a column Long Lat because the database has a long lat.
+      # In this case this means that some trees have a position recorded.
+      tlr = self$layout$tree_layout_raw
+      longname = df_find_column(tlr, LONGITUDECOLNAMES, mustWork = FALSE)
+      latname = df_find_column(tlr, LATITUDECOLNAMES, mustWork = FALSE)
+      has_position = !is.null(longname) & !is.null(latname)
+
+      # Yes we have a position for some trees. It means we can align the layout in local space
+      # centered on 0,0 into the real world coordinate system
+      if (has_position)
+      {
+        message("Detection of long lat in the database")
+
+        # Create a sf with long lat
+        long = tlr[[longname]]
+        lat = tlr[[latname]]
+        long = as.numeric(na.omit(long))
+        lat = as.numeric(na.omit(lat))
+        longlat = data.frame(long, lat)
+        longlat = sf::st_as_sf(longlat, coords = c("long", "lat"), crs = 4326)
+
+        # Transform in current CRS
+        global = sf::st_transform(longlat, self$crs)
+        global = sf::st_coordinates(global)[,1:2]
+
+        # Find the local coordinated of the corresponding trees
+        idx = which(!is.na(tlr[[longname]]))
+        local = sf::st_coordinates(tlr[idx,])[,1:2]
+
+        # Align with SVD decomposition
+        M = layout_alignment_svd(local, global)
+        self$layout$set_matrix(M)
       }
 
       if (!nowrite)
@@ -342,24 +426,49 @@ Plantation <- R6::R6Class("Plantation",
       prog$tick(7,  detail = "Done")
     },
 
+    align_layout = function()
+    {
+      if (is.null(self$layout$tree_layout_oriented))  stop("Missing: tree layout")
+      if (is.null(self$schm)) stop("Missing: smooth CHM")
+      if (is.null(self$layout$origin)) stop("Missing: tree layout's origin")
+      if (is.null(self$layout$spacing)) stop("Missing: tree layout'$'s spacing")
+      if (is.null(self$boundaries)) stop("Missing: plantation boundaries")
+
+      res = layout_alignment_lm(
+        self$layout$tree_layout_raw,
+        self$schm,
+        self$layout$origin,
+        self$layout$spacing*0.75,
+        self$boundaries)
+      angle = res[1]
+      tx = res[2]
+      ty = res[3]
+      origin = self$layout$origin
+      origin[1] = origin[1] + tx
+      origin[2] = origin[2] + ty
+      self$layout$set_angle(-angle)
+      self$layout$set_origin(origin[1], origin[2])
+    },
+
     adjust_layout = function(hmin = 2, progress = NULL)
     {
       if (is.null(self$chm)) stop("No CHM available")
       if (is.null(self$schm)) stop("No smoothed CHM available")
       if (is.null(self$layout$tree_layout_oriented)) stop("No tree layout available")
       if (is.null(self$layout$spacing)) stop("No spacing available in tree layout")
-      if (is.null(hmin)) stop("No hmin argument")
-      if (!is.numeric(hmin) || length(hmin) != 1 || hmin <= 0) stop("hmin must be a single positive numeric value")
+      if (is.null(hmin)) stop("No 'hmin' argument")
+      if (!is.numeric(hmin) || length(hmin) != 1 || hmin <= 0) stop("'hmin' must be a single positive numeric value")
 
       chm = self$chm
       echm = self$schm
       plan = self$layout$tree_layout_oriented
       spacing = self$layout$spacing
       echm[is.na(echm)] = 0
+
+      # The layout is hypothetical. Tree might be sightly off the theoretical pattern
       self$layout$tree_layout_adjusted = relocate_trees(chm, echm, plan, spacing, hmin, progress)
 
-      self$trees = self$layout$tree_layout_adjusted
-      self$layout_warnings = validate_tree(self$trees, plan, spacing, hmin)
+      self$layout_warnings = validate_tree(self$layout$tree_layout_adjusted, plan, spacing, hmin)
 
       if (is.null(self$fdebug))
         self$fdebug = paste0(self$wd,  "/debug.gpkg")
@@ -371,13 +480,13 @@ Plantation <- R6::R6Class("Plantation",
       if (!is.null(self$layout_warnings$warn))
         sf::st_write(self$layout_warnings$warn, dsn = self$fdebug, layer = "warnings", quiet = TRUE, append = FALSE)
 
-      if (is.null(self$fmeasurements))
-        self$fmeasurements = paste0(self$wd,  "/tree_measurements.gpkg")
+      if (is.null(self$fplan))
+        self$fplan = paste0(self$wd,  "/plan_layout.gpkg")
 
-      if (file.exists(self$fmeasurements))
-        file.remove(self$fmeasurements)
+      if (file.exists(self$fplan))
+        file.remove(self$fplan)
 
-      sf::st_write(self$trees, dsn = self$fmeasurements, layer = "trees", quiet = TRUE, append = FALSE)
+      sf::st_write(self$layout$tree_layout_adjusted, dsn = self$fplan, layer = "trees", quiet = TRUE, append = FALSE)
 
       self$params$treesHmin = hmin
       self$write_config()
@@ -389,8 +498,8 @@ Plantation <- R6::R6Class("Plantation",
       if (is.null(self$schm)) stop("No smoothed CHM available")
       if (is.null(self$layout$tree_layout_adjusted)) stop("No tree layout available")
       if (is.null(self$layout$spacing)) stop("No spacing available in tree layout")
-      if (is.null(hmin)) stop("No hmin argument")
-      if (!is.numeric(hmin) || length(hmin) != 1 || hmin <= 0) stop("hmin must be a single positive numeric value")
+      if (is.null(hmin)) stop("No 'hmin' argument")
+      if (!is.numeric(hmin) || length(hmin) != 1 || hmin <= 0) stop("'hmin' must be a single positive numeric value")
 
       chm = self$chm
       echm = self$schm
@@ -400,16 +509,14 @@ Plantation <- R6::R6Class("Plantation",
 
       ans <- measure_trees(trees, chm, echm, spacing, hmin, use_dalponte = !watershed, progress = progress)
 
-      self$trees = ans$trees
-      self$crowns = ans$crowns
+      self$trees  = self$joint_database(ans$trees)
+      self$crowns = self$joint_database(ans$crowns)
 
       if (is.null(self$fmeasurements))
         self$fmeasurements = paste0(self$wd,  "/tree_measurements.gpkg")
 
       if (file.exists(self$fmeasurements))
           file.remove(self$fmeasurements)
-
-      self$joint_database()
 
       sf::st_write(self$trees, dsn = self$fmeasurements, layer = "trees", quiet = TRUE, append = FALSE)
       sf::st_write(self$crowns, dsn = self$fmeasurements, layer = "crowns", quiet = TRUE, append = FALSE)
@@ -707,24 +814,24 @@ Plantation <- R6::R6Class("Plantation",
       self$write_config()
     },
 
-    joint_database = function()
+    joint_database = function(x)
     {
-      if (!is.null(self$trees) & !is.null(self$fdatabase))
+      if (!is.null(x) & !is.null(self$fdatabase))
       {
-        sheet_name <- xls_find_sheet(self$fdatabase, TREESHEETNAMES)
-        db = readxl::read_excel(self$fdatabase, sheet = sheet_name)
+        db = self$database
 
-        names(db)[names(db) == "Pset(Block)"] <- BLOCKNAME
+        if (!BLOCKNAME  %in% names(db)) stop(paste0("Column ", BLOCKNAME, " is missing in the Excel file"))
+        if (!TPOSNAME   %in% names(db)) stop(paste0("Column ", TPOSNAME, " is missing in the Excel file"))
 
-        tmp = merge(self$trees, db, by = c(TPOSNAME, BLOCKNAME, ROWNAME, COLNAME), all.x = TRUE)
+        tmp = merge(x, db, by = c(BLOCKNAME, TPOSNAME), all.x = TRUE)
 
         # Reorder: first all original `trees` columns, then the new ones from `db`
-        tree_cols <- names(self$trees)
+        tree_cols <- names(x)
         db_cols   <- setdiff(names(tmp), tree_cols)
         tmp <- tmp[c(db_cols, tree_cols)]
         tmp = sf::st_as_sf(tmp)
 
-        self$trees = tmp
+        return(tmp)
       }
     },
 
@@ -764,16 +871,16 @@ Plantation <- R6::R6Class("Plantation",
         bound = self$boundaries
         bound = terra::vect(self$boundaries)
         bound = terra::buffer(bound, buffer)
-        if (!is.null(self$dtm)) self$dtm  = terra::mask(self$dtm, bound)
-        if (!is.null(self$chm)) self$chm  = terra::mask(self$chm, bound)
-        if (!is.null(self$schm))self$schm = terra::mask(self$schm, bound)
+        if (!is.null(self$dtm)) self$dtm  = terra::crop(self$dtm, bound)
+        if (!is.null(self$chm)) self$chm  = terra::crop(self$chm, bound)
+        if (!is.null(self$schm))self$schm = terra::crop(self$schm, bound)
         if (!is.null(self$las)) self$las  = lidR::clip_roi(self$las, sf::st_as_sf(bound))
       }
     },
 
     is_adjusted = function()
     {
-      return(!is.null(self$trees))
+      return(!is.null(self$layout$tree_layout_adjusted))
     },
 
     leaflet = function(edit = NULL, dtm = TRUE, chm = TRUE, schm = TRUE, bbox = TRUE, trees = TRUE, layout = TRUE)
@@ -925,7 +1032,7 @@ Plantation <- R6::R6Class("Plantation",
           col = "#03F"  # fallback if no TreeFound column
         }
 
-        map = map |> leaflet::addCircleMarkers(data = data, color = col, group = "Tree layout", radius = 1)
+        map = map |> leaflet::addCircleMarkers(data = data, color = col, group = "Tree layout", radius = 1, layerId = 1:nrow(data))
         overlayGroups = c(overlayGroups, "Tree layout")
       }
 
@@ -953,7 +1060,6 @@ Plantation <- R6::R6Class("Plantation",
           opacity = 1
         )
       }
-
 
       if (length(overlayGroups) > 0)
       {
@@ -1109,6 +1215,12 @@ Plantation <- R6::R6Class("Plantation",
       self$fconfig = file
 
       config = jsonlite::read_json(file)
+
+      if (is.null(config$format)) stop("Invalid RPBC file format")
+      if (config$format$signature != "RPBC") stop("Invalid RPBC file signature")
+      if (config$format$version != "1.0") stop("Invalid RPBC file version")
+
+      # First we read the point cloud
       if (!is.null(config$point_cloud))
       {
         self$set_cloud(config$point_cloud$file, nowrite = TRUE)
@@ -1116,28 +1228,54 @@ Plantation <- R6::R6Class("Plantation",
         self$params$rigidness = config$point_cloud$rigidness
         self$params$cloth_resolution = config$point_cloud$cloth_resolution
       }
-      if (!is.null(config$boundaries)) self$set_boundaries(config$boundaries$file, nowrite = TRUE)
-      if (!is.null(config$dtm)) self$set_dtm(config$dtm$file, nowrite = TRUE)
+
+      # Second we read the database
+      if (!is.null(config$database))
+      {
+        self$fdatabase = config$database$file
+        self$set_database(self$fdatabase, nowrite = TRUE)
+      }
+
+      # Maybe we have a boundary file. But maybe the boundary come from Excel file
+      # Thus is has already been built by set_database
+      if (!is.null(config$boundaries) & is.null(self$boundaries))
+      {
+        self$set_boundaries(config$boundaries$file, nowrite = TRUE)
+      }
+
+      if (!is.null(config$dtm))
+      {
+        self$set_dtm(config$dtm$file, nowrite = TRUE)
+      }
+
       if (!is.null(config$chm))
       {
         self$set_chm(config$chm$file, nowrite = TRUE)
         self$params$resCHM = config$chm$res
       }
+
       if (!is.null(config$schm))
       {
         self$set_schm(config$schm$file, nowrite = TRUE)
         self$params$smoothCHM = config$schm$smoothCHM
         self$params$smoothPasses = config$schm$smoothPasses
       }
+
+      # Now more complex, set up the layout
       if (!is.null(config$layout))
       {
-        self$set_layout(config$layout$file, nowrite = TRUE)
+        if (config$layout$file != config$database$file)
+          self$set_layout(config$layout$file, nowrite = TRUE)
+
+        # from_geodatabase is false. In means we read from Excel database. Otherwise
+        # the layout comes from third party source. It has been loaded as is.
         if (!self$layout$from_geodatabase)
         {
+          # We build the layout
           if (!is.null(config$layout$block_size))
           {
             self$set_layout_parameter(
-              block_size = config$layout$block_size,
+              block_size = unlist(config$layout$block_size),
               num_trees = config$layout$num_trees,
               start = config$layout$start,
               orientation = config$layout$orientation,
@@ -1151,13 +1289,17 @@ Plantation <- R6::R6Class("Plantation",
             self$layout$set_angle(config$layout$angle)
         }
       }
+
       if (!is.null(config$measurements))
       {
         if (!is.null(config$measurements$file))
+        {
           self$set_measurements(config$measurements$file, nowrite = TRUE)
+        }
         self$params$crownsHmin = config$measurements$crownsHmin
         self$params$treesHmin = config$measurements$treesHmin
       }
+
       if (!is.null(config$debug))
       {
         self$fdebug = config$debug$file
@@ -1166,7 +1308,6 @@ Plantation <- R6::R6Class("Plantation",
           move = sf::st_read(self$fdebug, layer = "moves", quiet = TRUE)
         )
       }
-      if (!is.null(config$database)) self$fdatabase = config$database$file
 
       if (!is.null(config$crs))
         self$set_crs(config$crs$wkt, nowrite = TRUE)
@@ -1182,7 +1323,9 @@ Plantation <- R6::R6Class("Plantation",
       config = list()
 
       # Insert the RPBC file format
-      config$format = list(signature = "RPBC", version = 1.0)
+      config$format = list(
+        signature = "RPBC",
+        version = "1.0")
 
       # For point cloud we store
       # - the file
@@ -1196,8 +1339,13 @@ Plantation <- R6::R6Class("Plantation",
         cloth_resolution = self$params$cloth_resolution
       )
 
-      config$boundaries = list(file = self$fboundaries)
-      config$dtm = list(file = self$fdtm)
+      config$boundaries = list(
+        file = self$fboundaries
+      )
+
+      config$dtm = list(
+        file = self$fdtm
+      )
 
       config$chm = list(
         file = self$fchm,
@@ -1273,38 +1421,3 @@ Plantation <- R6::R6Class("Plantation",
     }
   )
 )
-
-assert_file_exists = function(file)
-{
-  if (!file.exists(file))
-    stop(paste0("File not found: ", file))
-}
-
-assert_sf_polygon = function(sf)
-{
-  if (sf::st_geometry_type(sf) != "POLYGON")
-    stop(paste0("Entities are expected to be POLYGON not ", sf::st_geometry_type(sf)))
-}
-
-assert_sf_point = function(sf)
-{
-  if (sf::st_geometry_type(sf) != "POINT")
-    stop(paste0("Entities are expected to be POINT not ", sf::st_geometry_type(sf)))
-}
-
-assert_point_cloud_loaded = function(las)
-{
-  if (is.null(las))
-    stop("No point cloud loaded yet")
-}
-
-assert_file_ext <- function(file, expected_ext) {
-  ext <- tools::file_ext(file)
-  if (tolower(ext) != tolower(expected_ext)) {
-    stop(sprintf(
-      "Invalid file extension: '%s'. Expected '.%s'.",
-      ext, expected_ext
-    ), call. = FALSE)
-  }
-  invisible(TRUE)
-}

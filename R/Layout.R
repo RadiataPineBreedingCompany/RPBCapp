@@ -38,7 +38,7 @@ RPBCLayout <- R6::R6Class("Plantation",
 
       if (ext %in% c("xls", "xlsx"))
       {
-        sheet_name = xls_find_sheet(file, BLOCKSHEETNAMES)
+        sheet_name = xls_find_sheet(file, BLOCKSHEETNAMES, mustWork = TRUE)
         block_layout_table = readxl::read_excel(file, sheet = sheet_name)
 
         expected_columns = c("BlockID", "BlockRow", "BlockCol")
@@ -56,8 +56,8 @@ RPBCLayout <- R6::R6Class("Plantation",
 
         assert_sf_point(layout)
 
-        if (any(!c(TPOSNAME, BLOCKNAME, ROWNAME, COLNAME) %in% names(layout)))
-          stop(paste0("The tree layout must have attributes named '", TPOSNAME, "' '", BLOCKNAME, "' '", ROWNAME, "' '", COLNAME, "'"))
+        if (any(!c(TPOSNAME, BLOCKNAME) %in% names(layout)))
+          stop(paste0("The tree layout must have attributes named '", TPOSNAME, "' '", BLOCKNAME, "'"))
 
         # Estimate spacing
         d = sf::st_coordinates(layout)
@@ -90,7 +90,7 @@ RPBCLayout <- R6::R6Class("Plantation",
       self$num_trees = num_trees
       self$spacing = self$block_size/self$num_trees
       self$block_layout_raw = generate_blocks(self$block_layout_table, block_size)
-      self$tree_layout_raw = generate_trees(self$block_layout_raw , block_size, num_trees, start = start, orientation = orientation)
+      self$tree_layout_raw = generate_trees(self$block_layout_raw, block_size, num_trees, start = start, orientation = orientation)
       self$block_layout_oriented = self$block_layout_raw
       self$tree_layout_oriented = self$tree_layout_raw
     },
@@ -118,6 +118,18 @@ RPBCLayout <- R6::R6Class("Plantation",
       self$move()
     },
 
+    set_matrix = function(M)
+    {
+      if (self$from_geodatabase) return()
+
+      crs = sf::st_crs(self$block_layout_raw)
+
+      self$block_layout_oriented <- st_affine(self$block_layout_raw, M)
+      self$tree_layout_oriented <- st_affine(self$tree_layout_raw, M)
+
+      self$set_crs(crs)
+    },
+
     move = function()
     {
       if (self$from_geodatabase) return()
@@ -126,7 +138,9 @@ RPBCLayout <- R6::R6Class("Plantation",
 
       angle = self$angle
       translate = self$origin
-      tree_zero = as.numeric(sf::st_coordinates(sf::st_geometry(self$tree_layout_raw)[1]))
+      tree_zero = self$tree_layout_raw
+      tree_zero = tree_zero[tree_zero[[BLOCKNAME]] == 1 & tree_zero[[TPOSNAME]] == 1, ]
+      tree_zero = as.numeric(sf::st_coordinates(sf::st_geometry(tree_zero)))
       offset = tree_zero
       translate = translate - offset
 
@@ -185,6 +199,47 @@ rotation <- function(a)
   matrix(c(cos(r), sin(r), -sin(r), cos(r)), nrow = 2, ncol = 2)
 }
 
+
+st_affine <- function(x, M)
+{
+  stopifnot(ncol(M) == 3, nrow(M) == 3)
+  stopifnot(inherits(x, "sf") || inherits(x, "sfc"))
+
+  geom <- sf::st_geometry(x)
+
+  geom_new <- lapply(geom, function(g)
+  {
+    type <- class(g)[2]
+    coords <- sf::st_coordinates(g)
+    P <- cbind(coords[,1:2, drop = FALSE], 1)
+    P_new <- P %*% t(M)
+    coords[,1:2] <- P_new[,1:2]
+
+    # Rebuild geometry per type
+    if (type == "POINT") {
+      sf::st_point(coords[1,1:2])
+    } else if (type == "MULTIPOINT") {
+      sf::st_multipoint(coords[,1:2])
+    } else if (type == "LINESTRING") {
+      sf::st_linestring(coords[,1:2])
+    } else if (type == "POLYGON") {
+      sf::st_polygon(list(coords[,1:2]))
+    } else {
+      stop(paste("Unsupported geometry type:", type))
+    }
+  })
+
+  geom_new <- sf::st_sfc(geom_new, crs = sf::st_crs(x))
+
+  if (inherits(x, "sf")) {
+    sf::st_set_geometry(x, geom_new)
+  } else {
+    geom_new
+  }
+}
+
+
+
 rotate_sf <- function(x, theta, center = c(0,0))
 {
   rot <- rotation(theta)
@@ -196,8 +251,14 @@ rotate_sf <- function(x, theta, center = c(0,0))
   sf::st_set_geometry(x, rotated)
 }
 
+#' @export
 generate_blocks <- function(block_layout, block_size)
 {
+  block_size_x = block_size[1]
+  block_size_y = block_size[1]
+  if (length(block_size) > 1)
+    block_size_y = block_size[2]
+
   # Add extra buffer block
   nrows = max(block_layout$BlockRow)
   ncols = max(block_layout$BlockCol)
@@ -210,11 +271,11 @@ generate_blocks <- function(block_layout, block_size)
   polys <- lapply(seq_len(nrow(all_blocks)), function(i) {
     row <- all_blocks[i, ]
     coords <- rbind(
-      c((row$BlockCol - 1) * block_size, (row$BlockRow - 1) * block_size), # bottom-left
-      c((row$BlockCol)     * block_size, (row$BlockRow - 1) * block_size), # bottom-right
-      c((row$BlockCol)     * block_size, (row$BlockRow)     * block_size), # top-right
-      c((row$BlockCol - 1) * block_size, (row$BlockRow)     * block_size), # top-left
-      c((row$BlockCol - 1) * block_size, (row$BlockRow - 1) * block_size)  # close polygon
+      c((row$BlockCol - 1) * block_size_x, (row$BlockRow - 1) * block_size_y), # bottom-left
+      c((row$BlockCol)     * block_size_x, (row$BlockRow - 1) * block_size_y), # bottom-right
+      c((row$BlockCol)     * block_size_x, (row$BlockRow)     * block_size_y), # top-right
+      c((row$BlockCol - 1) * block_size_x, (row$BlockRow)     * block_size_y), # top-left
+      c((row$BlockCol - 1) * block_size_x, (row$BlockRow - 1) * block_size_y)  # close polygon
     )
     sf::st_polygon(list(coords))
   })
@@ -225,20 +286,36 @@ generate_blocks <- function(block_layout, block_size)
   all_blocks
 }
 
+
 #' @export
-generate_trees = function(block_layout, block_size, num_trees, start, orientation)
+generate_trees <- function(block_layout, block_size, num_trees, start, orientation)
 {
+  block_size_x = block_size[1]
+  block_size_y = block_size[1]
+  if (length(block_size) > 1)
+    block_size_y = block_size[2]
+
   sf::st_agr(block_layout) = "constant"
-  block_centers = sf::st_centroid(block_layout)
-  block_centers = sf::st_coordinates(block_centers)
-  block_centers = cbind(block_centers, block_layout$BlockID)
-  tree_layout = lapply(1:nrow(block_centers), function(i)
-  {
-    block = generate_snake_coords(num_trees, block_centers[i,1], block_centers[i,2], block_size/num_trees, start = start, orientation = orientation)
-    block = sf::st_as_sf(block, coords = c("x", "y"))
-    block[[BLOCKNAME]] = block_centers[i,3]
+  block_centers <- sf::st_centroid(block_layout)
+  block_centers <- sf::st_coordinates(block_centers)
+  block_centers <- cbind(block_centers, block_layout$BlockID)
+
+  tree_layout <- lapply(1:nrow(block_centers), function(i) {
+    block <- generate_snake_coords(
+      num_trees,
+      block_centers[i,1],
+      block_centers[i,2],
+      block_size_x,
+      block_size_y,
+      start = start,
+      orientation = orientation
+    )
+    block <- sf::st_as_sf(block, coords = c("x", "y"))
+    block[[BLOCKNAME]] <- block_centers[i,3]
     block
   })
-  tree_layout = do.call(rbind, tree_layout)
+
+  tree_layout <- do.call(rbind, tree_layout)
   tree_layout
 }
+

@@ -53,3 +53,38 @@ df_find_column = function(df, valid_col_names, mustWork = TRUE)
   res <- res[1]
   return(col_names[res])
 }
+
+assert_file_exists = function(file)
+{
+  if (!file.exists(file))
+    stop(paste0("File not found: ", file))
+}
+
+assert_sf_polygon = function(sf)
+{
+  if (any(sf::st_geometry_type(sf) != "POLYGON"))
+    stop("Entities are expected to be POLYGON ")
+}
+
+assert_sf_point = function(sf)
+{
+  if (any(sf::st_geometry_type(sf) != "POINT"))
+    stop("Entities are expected to be POINT")
+}
+
+assert_point_cloud_loaded = function(las)
+{
+  if (is.null(las))
+    stop("No point cloud loaded yet")
+}
+
+assert_file_ext <- function(file, expected_ext) {
+  ext <- tools::file_ext(file)
+  if (tolower(ext) != tolower(expected_ext)) {
+    stop(sprintf(
+      "Invalid file extension: '%s'. Expected '.%s'.",
+      ext, expected_ext
+    ), call. = FALSE)
+  }
+  invisible(TRUE)
+}

@@ -2,13 +2,13 @@
 layout_alignment_lm = function(layout, chm, pivot, ws, boundaries)
 {
   debug = FALSE
-  #' layout = self$layout$tree_layout_raw
-  #' chm = self$schm
-  #' pivot = self$layout$origin
-  #' ws = self$layout$spacing*0.75
-  #' boundaries = self$boundaries
+  # layout = self$layout$tree_layout_raw
+  # chm = self$schm
+  # pivot = self$layout$origin
+  # ws = self$layout$spacing*0.75
+  # boundaries = self$boundaries
 
-  ttps = lidR::locate_trees(chm, lidR::lmf(ws))
+  ttps = lidR::locate_trees(chm, lidR::lmf(min(ws)))
 
   if (nrow(ttps) == 0)
     stop("Internal error: automatic detection of trees failed and found zero trees. Please report at info@r-lidar.com")
@@ -119,23 +119,19 @@ layout_alignment_lm = function(layout, chm, pivot, ws, boundaries)
 layout_alignment_svd <- function(local_points, global_points)
 {
   if (!is.matrix(local_points) || !is.matrix(global_points))
-    stop("Input points must be matrices.")
+    stop("Input points must be matrices. Please report to info@r-lidar.com")
+
+  if (nrow(local_points) < 2)
+    stop("At least 2 points must be moved to realign the tree layout.")
+
+  if (ncol(local_points) != 2)
+    stop("The matrices must have 2 columns. Please report to info@r-lidar.com")
+
+  if (ncol(local_points) != ncol(global_points))
+    stop("Different number of columns in local and global coordinates. Please report to info@r-lidar.com")
 
   if (nrow(local_points) != nrow(global_points))
-    stop("Different number of local coordinates and global coordinates")
-
-  if (length(unique(local_points[,3])) > 1)
-  {
-    ans = lapply(unique(local_points[,3]), function(id)
-    {
-      keep = local_points[,3] == id
-      loc = local_points[keep,]
-      glo = global_points[keep,]
-      return(find_transformation(loc, glo))
-    })
-
-    return(ans)
-  }
+    stop("Different number of rows in local and global coordinates. Please report to info@r-lidar.com")
 
   local_points = local_points[,1:2]
   global_points = global_points[,1:2]

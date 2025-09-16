@@ -194,7 +194,12 @@ ui <- page_navbar(
         width = 300,
         wellPanel(
           tags$p(tags$strong("Tree planting pattern")),
-          numericInput("blockSizeInput", "Block size", value = 18.6, min = 5, max = 50, step = 0.1),
+          div(
+            style = "display: flex; align-items: center; gap: 6px;",
+            numericInput("blockSizeInputX", NULL, value = 18.6, min = 5, max = 50, step = 0.1, width = "80px"),
+            tags$span("×"),
+            numericInput("blockSizeInputY", NULL, value = 18.6, min = 5, max = 50, step = 0.1, width = "80px")
+          ),
           numericInput("treeNumberInput", "Number of Trees", value = 6, min = 2, max = 12, step = 1),
 
           radioButtons(
@@ -240,10 +245,7 @@ ui <- page_navbar(
         wellPanel(
           tags$p(tags$strong("Tree Zero")),
           tooltiped("Using the CHM, click on the tree zero", "This tree will be use as pivot point to align the tree layout map real trees"),
-          uiOutput("clickTreeZeroInfo")
-        ),
-        wellPanel(
-          tags$p(tags$strong("Run alignment")),
+          uiOutput("clickTreeZeroInfo"),
           tooltiped("Run automatic alignment.", "Once the pivot point has been choosen accurately, this button trigger an alignment with real trees"),
           actionButton("alignLayoutButton", "Align trees")
         ),
@@ -257,6 +259,16 @@ ui <- page_navbar(
         )
       ),
       div(
+        tags$style(HTML("
+          /* Shrink the Leaflet.draw edit/move handles */
+          .leaflet-div-icon.leaflet-editing-icon {
+            width: 8px !important;
+            height: 8px !important;
+            margin-left: -4px !important;
+            margin-top: -4px !important;
+            border-radius: 4px !important;
+          }
+        ")),
         style = "width: 100%; height: 100%;",
         leaflet::leafletOutput("mapTreeLayout",width = "100%", height = "100%")
       ),

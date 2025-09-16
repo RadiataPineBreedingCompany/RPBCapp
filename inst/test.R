@@ -54,8 +54,9 @@ self$leaflet()
 # ========================
 
 file = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/19BP01/BC19BP01CKT_EstReport.xlsx"
+file = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/example2/BC19BP01CKT_EstReport.xlsx"
 
-block_size <- 18.6
+block_size <- c(18.6)
 num_trees <- 6
 
 self = RPBCapp:::RPBCLayout$new()
@@ -219,13 +220,14 @@ self$leaflet()
 
 conf = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/19BP01/19BP01.rpbc"
 conf = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/BC66_1 Kinleith/BC66_1_Kinleith_2023.rpbc"
+conf = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/BC55_2_Kaingaroa/BC55_2_Kaingaroa.rpbc"
 self = Plantation$new()
 self$read_config(conf)
 self$layout$set_angle(0)
 self$layout$set_origin(1916419.46, 5738336.67)
 self$layout$set_origin(1867580.13, 5756370.033)
 self$leaflet()
-res = layout_alignment_angle(self$layout$tree_layout_raw, self$schm, self$layout$origin, self$layout$spacing*0.75, self$boundaries)
+res = layout_alignment_lm(self$layout$tree_layout_raw, self$schm, self$layout$origin, self$layout$spacing*0.75, self$boundaries)
 res
 angle = res[1]
 tx = res[2]
@@ -237,3 +239,26 @@ origin[2] = origin[2] + ty
 self$layout$set_angle(-angle)
 self$layout$set_origin(origin[1], origin[2])
 self$leaflet()
+
+
+
+conf = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/example2/example2.rpbc"
+self = Plantation$new()
+self$read_config(conf)
+self$set_crs(2193)
+self$set_database(conf)
+block_size <- 18.6
+num_trees <- 6
+self$set_layout_parameter(block_size, num_trees, "bl", "v")
+self$layout$plot()
+self$layout$tree_layout_raw
+self$layout$tree_layout_oriented
+
+self$adjust_layout()
+
+self$layout$tree_layout_raw
+self$layout$tree_layout_oriented
+self$trees
+self$measure_trees(4.5)
+
+self$trees

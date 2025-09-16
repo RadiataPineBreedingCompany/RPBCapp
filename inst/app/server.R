@@ -173,7 +173,13 @@ server <- function(input, output, session)
 
         if (!is.null(plantation$layout))
         {
-          updateNumericInput(session, "blockSizeInput",  value = plantation$layout$block_size)
+          x_size = plantation$layout$block_size[1]
+          y_size = x_size
+          if (length(plantation$layout$block_size) == 2)
+            y_size = plantation$layout$block_size[2]
+
+          updateNumericInput(session, "blockSizeInputX",  value = x_size)
+          updateNumericInput(session, "blockSizeInputY",  value = y_size)
           updateNumericInput(session, "treeNumberInput", value = plantation$layout$num_trees)
           updateRadioButtons(session, "partternStartChoiceRadioButton", selected = plantation$layout$start)
           updateRadioButtons(session, "partternOrientationChoiceRadioButton", selected = plantation$layout$orientation)
@@ -259,7 +265,7 @@ server <- function(input, output, session)
       tryCatch({
         plantation$set_database(file)
         plantation$set_layout_parameter(
-          input$blockSizeInput,
+          c(input$blockSizeInputX, input$blockSizeInputY),
           input$treeNumberInput,
           input$partternStartChoiceRadioButton,
           input$partternOrientationChoiceRadioButton)
@@ -288,6 +294,7 @@ server <- function(input, output, session)
         plantation$set_boundaries(file)
         update_preview_map(runif(1))
         update_file_table(runif(1))
+        update_state_table(runif(1))
       },
       error = function(e)
       {
@@ -358,26 +365,7 @@ server <- function(input, output, session)
     showNotification("Aligning tree layout")
 
     tryCatch({
-      if (is.null(plantation$layout$tree_layout_oriented))  stop("Missing: tree layout")
-      if (is.null(plantation$schm)) stop("Missing: smooth CHM")
-      if (is.null(plantation$layout$origin)) stop("Missing: tree layout's origin")
-      if (is.null(plantation$layout$spacing)) stop("Missing: tree layout'$'s spacing")
-      if (is.null(plantation$boundaries)) stop("Missing: plantation boundaries")
-
-      res = layout_alignment_lm(
-        plantation$layout$tree_layout_raw,
-        plantation$schm,
-        plantation$layout$origin,
-        plantation$layout$spacing*0.75,
-        plantation$boundaries)
-      angle = res[1]
-      tx = res[2]
-      ty = res[3]
-      origin = plantation$layout$origin
-      origin[1] = origin[1] + tx
-      origin[2] = origin[2] + ty
-      plantation$layout$set_angle(-angle)
-      plantation$layout$set_origin(origin[1], origin[2])
+      plantation$align_layout()
       update_layout_map(runif(1))
       update_state_table(runif(1))
       saveProject(runif(1))
@@ -437,13 +425,42 @@ server <- function(input, output, session)
     })
   }, ignoreInit = TRUE)
 
-  # observeEvent(input$map_draw_edited_features, {
-  #   edits <- input$map_draw_edited_features
-  #   if (!is.null(edits)) {
-  #     edited <- sf::st_read(jsonlite::toJSON(edits), quiet = TRUE)
-  #     self$boundaries <- edited  # update your object
-  #   }
-  # })
+  # ===== On Edited Feature ======
+  observeEvent(input$mapTreeLayout_draw_edited_features, {
+    showNotification("SVD alignment")
+    edits <- input$mapTreeLayout_draw_edited_features
+    if (!is.null(edits))
+    {
+      tryCatch({
+        geojson <- jsonlite::toJSON(edits, auto_unbox = TRUE)
+        print(geojson)
+        edited <- geojsonsf::geojson_sf(geojson)
+        edited <- sf::st_transform(edited, plantation$crs)
+
+        local = RPBCapp:::remove_virtual_trees(plantation$layout$tree_layout_raw)
+        local = local[edited$layerId,]
+
+        Mlocal = sf::st_coordinates(local)
+        Mglobal = sf::st_coordinates(edited)
+
+        #print(dput(Mlocal))
+        #print(dput(Mglobal))
+        M = layout_alignment_svd(Mlocal, Mglobal)
+        #print(dput(M))
+        plantation$layout$set_matrix(M)
+
+        output$mapTreeLayout <- leaflet::renderLeaflet({
+          showNotification("Updating layout map")
+          plantation$show_layout(edit = "Tree layout")
+        })
+      },
+      error = function(e)
+      {
+        popup_error(conditionMessage(e))
+        update_layout_map(runif(1))
+      })
+    }
+  })
 
   # ===== OnClick processPointCloudButton ====
   observeEvent(input$processPointCloudButton, {
@@ -475,11 +492,10 @@ server <- function(input, output, session)
     update_file_table(runif(1))
   })
 
-
   # ===== OnChange partternChoiceRadioButton ====
   output$selectedPatternImage <- renderPlot({
     coords = generate_snake_coords(
-      input$treeNumberInput, 0, 0, 1,
+      input$treeNumberInput, 0, 0, 1, 1,
       input$partternOrientationChoiceRadioButton,
       input$partternStartChoiceRadioButton)
 
@@ -494,13 +510,14 @@ server <- function(input, output, session)
          bty = "n"             # no box around plot
     )
 
-    text(coords$x+0.1, coords$y+0.1, labels = seq_len(nrow(coords)), cex = 0.6, col = "blue")
+    text(coords$x+0.01, coords$y+0.01, labels = seq_len(nrow(coords)), cex = 0.6, col = "blue")
     par(oldpar)  # reset margins to previous values
   })
 
   # ===== OnChange any tree pattern inputs ====
   observeEvent(
-    list(input$blockSizeInput,
+    list(input$blockSizeInputX,
+         input$blockSizeInputY,
          input$treeNumberInput,
          input$partternStartChoiceRadioButton,
          input$partternOrientationChoiceRadioButton),
@@ -508,13 +525,14 @@ server <- function(input, output, session)
       validate(need(!is.null(plantation$layout$tree_layout_raw), "No block layout file selected yet"))
 
       plantation$set_layout_parameter(
-        input$blockSizeInput,
+        c(input$blockSizeInputX,input$blockSizeInputY),
         input$treeNumberInput,
         input$partternStartChoiceRadioButton,
         input$partternOrientationChoiceRadioButton)
 
       update_layout_plot(runif(1))
-    }
+    },
+    ignoreInit = TRUE
   )
 
   # ===== OnEvent save ====
@@ -579,7 +597,7 @@ server <- function(input, output, session)
     p <- sf::st_transform(p, 2193)
     coords <- as.numeric(sf::st_coordinates(p))
 
-    print(paste0("Click = c(", paste0(coords, collapse = ", "), ")"))
+    #print(paste0("Click = c(", paste0(coords, collapse = ", "), ")"))
 
     # Get plantation if needed
     if (is.null(plantation$layout))
@@ -607,7 +625,7 @@ server <- function(input, output, session)
   output$mapTreeLayout <- leaflet::renderLeaflet({
     showNotification("Updating layout map")
     update_layout_map()
-    plantation$show_layout()
+    plantation$show_layout(edit = "Tree layout")
   })
 
   output$mapTrees <- leaflet::renderLeaflet({

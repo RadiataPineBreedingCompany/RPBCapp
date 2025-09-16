@@ -1,21 +1,20 @@
-snake_pattern <- function(n, orientation = c("h", "v"), start = c("tl", "tr", "bl", "br"))
+snake_pattern <- function(nx, ny, orientation = c("h", "v"), start = c("tl", "tr", "bl", "br"))
 {
   orientation <- match.arg(orientation)
   start <- match.arg(start)
 
-  # build sequence of (row, col) pairs for top-left start
-  rc_list <- vector("list", n * n)
+  rc_list <- vector("list", nx * ny)
   k <- 1
   if (orientation == "h") {
-    for (r in seq_len(n)) {
-      cols <- if (r %% 2 == 1) seq_len(n) else rev(seq_len(n))
+    for (r in seq_len(ny)) {
+      cols <- if (r %% 2 == 1) seq_len(nx) else rev(seq_len(nx))
       for (c in cols) {
         rc_list[[k]] <- c(r, c); k <- k + 1
       }
     }
-  } else { # vertical
-    for (c in seq_len(n)) {
-      rows <- if (c %% 2 == 1) seq_len(n) else rev(seq_len(n))
+  } else { # vertical snake
+    for (c in seq_len(nx)) {
+      rows <- if (c %% 2 == 1) seq_len(ny) else rev(seq_len(ny))
       for (r in rows) {
         rc_list[[k]] <- c(r, c); k <- k + 1
       }
@@ -25,20 +24,21 @@ snake_pattern <- function(n, orientation = c("h", "v"), start = c("tl", "tr", "b
   rc <- do.call(rbind, rc_list)
   rr <- rc[, 1]; cc <- rc[, 2]
 
-  # apply corner transform
+  # Apply starting corner transform
   if (start == "tr") {
-    cc <- n - cc + 1
+    cc <- nx - cc + 1
   } else if (start == "bl") {
-    rr <- n - rr + 1
+    rr <- ny - rr + 1
   } else if (start == "br") {
-    rr <- n - rr + 1
-    cc <- n - cc + 1
+    rr <- ny - rr + 1
+    cc <- nx - cc + 1
   }
 
-  # convert (row, col) to row-major index for expand.grid(x, y)
-  idx <- (rr - 1) * n + cc
+  # Convert (row, col) to row-major index (expand.grid(x, y))
+  idx <- (rr - 1) * nx + cc
   as.integer(idx)
 }
+
 
 #' Generate coordinates in a snake pattern on a square grid
 #'
@@ -94,28 +94,33 @@ snake_pattern <- function(n, orientation = c("h", "v"), start = c("tl", "tr", "b
 #' text(coords$x, coords$y, labels = seq_len(nrow(coords)), pos = 3, cex = 0.8, col = "blue")
 #' @seealso \code{\link{snake_pattern}} for generating the ordering indices only.
 #' @export
-generate_snake_coords <- function(n, cx, cy, spacing,  orientation = c("h", "v"), start = c("tl", "tr", "bl", "br"))
+generate_snake_coords <- function(n, cx, cy, spacing_x, spacing_y, orientation = c("h", "v"), start = c("tl", "tr", "bl", "br"))
 {
   orientation <- match.arg(orientation)
   start <- match.arg(start)
 
-  order <- snake_pattern(n, orientation, start)
+  order <- snake_pattern(n, n, orientation, start)
 
-  offsets <- seq(-(n-1)/2, (n-1)/2) * spacing
+  # compute offsets in x and y independently
+  offsets_x <- seq(-(n-1)/2, (n-1)/2) * (spacing_x / n)
+  offsets_y <- seq(-(n-1)/2, (n-1)/2) * (spacing_y / n)
 
-  # IMPORTANT: use row-major ordering (top row first, left->right)
-  grid <- expand.grid(x = offsets, y = rev(offsets))
+  # build grid, top-left first (row-major)
+  grid <- expand.grid(x = offsets_x, y = rev(offsets_y))
 
+  # row/column labels (optional)
   Prow <- rep(n:1, each = n)
   Pcol <- rep(letters[1:n], n)
 
+  # reorder by snake pattern
   coords <- grid[order, , drop = FALSE]
   coords$x <- coords$x + cx
   coords$y <- coords$y + cy
-  coords$Tpos <- seq_len(nrow(coords))
+  coords[[TPOSNAME]] <- seq_len(nrow(coords))
+  #coords[[ROWNAME]] <- Prow[order]
+  #coords[[COLNAME]] <- Pcol[order]
 
-  coords$Prow <- Prow[order]
-  coords$Pcol <- Pcol[order]
   coords
 }
+
 

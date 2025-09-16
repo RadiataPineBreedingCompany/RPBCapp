@@ -11,7 +11,7 @@ extract_with_buffer = function(raster, points, buffer)
 relocate_trees = function(chm, echm, plan, spacing, hmin, progress = NULL)
 {
   resolution = terra::res(echm)[1]
-  max_adjustment = spacing/2
+  max_adjustment = min(spacing)/2
   search_radius = resolution*sqrt(2)*1.1    # to move upward in the echm gradient
   iterations = as.integer(max_adjustment/resolution+1)  # number of movements
 
@@ -185,7 +185,7 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
 
   if (use_dalponte)
   {
-    segment = lidR::dalponte2016(echm, seeds, th_cr = 0, max_cr = spacing/2/terra::res(echm)[1]*1.25, th_tree = hmin, ID = "TREEID")
+    segment = lidR::dalponte2016(echm, seeds, th_cr = 0, max_cr = min(spacing)/2/terra::res(echm)[1]*1.25, th_tree = hmin, ID = "TREEID")
     rcrowns = segment()
     pcrown = sf::st_as_sf(terra::as.polygons(rcrowns))
     names(pcrown)[1] = "TREEID"
@@ -205,7 +205,7 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
 
   # Extract pixel values for each crown to estimate the height
   val = terra::extract(chm, pcrown)
-  height = aggregate(val$Z, by = list(val$ID), max, na.rm = TRUE)$x
+  height = suppressWarnings(aggregate(val$Z, by = list(val$ID), max, na.rm = TRUE)$x)
   height[is.infinite(height)] = NA
   height[nofound] = NA
 
@@ -222,10 +222,9 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
 
   trees$TREEID = NULL
   pcrown$TREEID = NULL
+
   pcrown[[BLOCKNAME]] = trees[[BLOCKNAME]]
   pcrown[[TPOSNAME]] = trees[[TPOSNAME]]
-  pcrown[[ROWNAME]] = trees[[ROWNAME]]
-  pcrown[[COLNAME]] = trees[[COLNAME]]
 
   # Remove polygon for which with have no apex
   sf::st_geometry(pcrown)[pcrown$ApexFound == FALSE] <- sf::st_sfc(sf::st_geometrycollection(), crs = sf::st_crs(pcrown))

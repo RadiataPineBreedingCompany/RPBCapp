@@ -8,7 +8,8 @@ generate_snake_coords(
   n,
   cx,
   cy,
-  spacing,
+  spacing_x,
+  spacing_y,
   orientation = c("h", "v"),
   start = c("tl", "tr", "bl", "br")
 )
@@ -20,14 +21,14 @@ generate_snake_coords(
 
 \item{cy}{Numeric. Y-coordinate of the center of the square.}
 
-\item{spacing}{Numeric. Distance between adjacent points.}
-
 \item{orientation}{Character. Either \code{"horizontal"} (snake pattern moves along rows)
 or \code{"vertical"} (snake pattern moves along columns).}
 
 \item{start}{Character. Starting corner of the snake. One of:
 \code{"tl"} = top-left, \code{"tr"} = top-right,
 \code{"bl"} = bottom-left, \code{"br"} = bottom-right.}
+
+\item{spacing}{Numeric. Distance between adjacent points.}
 }
 \value{
 A data frame with columns:
