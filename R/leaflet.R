@@ -1,18 +1,32 @@
 # ---- base map ----
 #' @export
-make_base_map <- function() {
+make_base_map <- function(groups = c()) {
   leaflet::leaflet() |>
     leaflet::addProviderTiles(
       leaflet::providers$Esri.WorldImagery,
       options = leaflet::providerTileOptions(minZoom = 2, maxZoom = 22)
     ) |>
-    leaflet::setView(lng = 174.8, lat = -41.0, zoom = 3)
+    leaflet::setView(
+      lng = 174.8,
+      lat = -41.0,
+      zoom = 3) |>
+    leaflet::addLayersControl(
+      overlayGroups = groups,
+      options = leaflet::layersControlOptions(collapsed = FALSE)
+    ) |>
+    leaflet.extras::addResetMapButton()
 }
 
 # ---- raster layers ----
 #' @export
 add_dtm_layer <- function(map, dtm, proxy = FALSE) {
   if (is.null(dtm)) return(list(map = map, groups = NULL))
+
+  if (anyNA(terra::minmax(dtm)))
+  {
+    warning("Cannot determine the range value of the DTM. DTM is corrupted")
+    return(list(map = map, groups = NULL))
+  }
 
   dtm_prod <- terra::terrain(dtm, v = c("slope", "aspect"), unit = "radians")
   dtm_hillshade <- terra::shade(slope = dtm_prod$slope, aspect = dtm_prod$aspect)
@@ -29,6 +43,12 @@ add_dtm_layer <- function(map, dtm, proxy = FALSE) {
 add_schm_layer <- function(map, schm, proxy = FALSE) {
   if (is.null(schm)) return(list(map = map, groups = NULL))
 
+  if (anyNA(terra::minmax(schm)))
+  {
+    warning("Cannot determine the range value of the sCHM. sCHM is corrupted")
+    return(list(map = map, groups = NULL))
+  }
+
   if (terra::inMemory(schm)) {
     o <- tempfile(fileext = ".tif")
     terra::writeRaster(schm, o, overwrite = TRUE)
@@ -43,7 +63,8 @@ add_schm_layer <- function(map, schm, proxy = FALSE) {
       colorOptions = leafem::colorOptions(palette = lidR::height.colors(20), na.color = "transparent"),
       resolution = 128,
       layerId = 1,
-      group = "sCHM"
+      group = "sCHM",
+      autozoom = FALSE
     )
   list(map = map, groups = "sCHM")
 }
@@ -51,6 +72,12 @@ add_schm_layer <- function(map, schm, proxy = FALSE) {
 #' @export
 add_chm_layer <- function(map, chm, proxy = FALSE) {
   if (is.null(chm)) return(list(map = map, groups = NULL))
+
+  if (anyNA(terra::minmax(chm)))
+  {
+    warning("Cannot determine the range value of the CHM. CHM is corrupted")
+    return(list(map = map, groups = NULL))
+  }
 
   if (terra::inMemory(chm)) {
     o <- tempfile(fileext = ".tif")
@@ -66,7 +93,8 @@ add_chm_layer <- function(map, chm, proxy = FALSE) {
       colorOptions = leafem::colorOptions(palette = lidR::height.colors(20), na.color = "transparent"),
       resolution = 128,
       layerId = 0,
-      group = "CHM"
+      group = "CHM",
+      autozoom = FALSE
     )
   list(map = map, groups = "CHM")
 }
@@ -76,9 +104,9 @@ add_chm_layer <- function(map, chm, proxy = FALSE) {
 add_bbox_layer <- function(map, bbox, proxy = FALSE) {
   if (is.null(bbox)) return(list(map = map, groups = NULL))
   data <- sf::st_transform(bbox, 4326)
-  if (proxy) map <- map |> leaflet::clearGroup("Point cloud")
-  map <- map |> leaflet::addPolygons(data = data, group = "Point cloud", color = "red", fill = FALSE)
-  list(map = map, groups = "Point cloud")
+  if (proxy) map <- map |> leaflet::clearGroup("Bounding box")
+  map <- map |> leaflet::addPolygons(data = data, group = "Bounding box", color = "red", fill = FALSE)
+  list(map = map, groups = "Bounding box")
 }
 
 #' @export

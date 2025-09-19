@@ -114,7 +114,11 @@ Plantation <- R6::R6Class("Plantation",
       geom <- sf::st_sfc(geom)
       sf::st_crs(geom) <- crs
       self$bbox <- geom
-      self$set_crs(crs, nowrite)
+
+      if (!is.na(crs))
+        self$set_crs(crs, nowrite)
+      else
+        self$set_crs(self$crs, nowrite)
 
       if (!nowrite)
         self$write_config()
@@ -192,7 +196,11 @@ Plantation <- R6::R6Class("Plantation",
 
         if (!is.numeric(x) | !is.numeric(y))
         {
-          msg = paste0("'", sheet_name, "' Excel sheet found with non numeric coordinates. No boundaries computed.")
+          if (ans == "lonlat")
+            msg = paste0("Exacel sheet '", sheet_name, "' found with non numeric longitude and latitude. No boundaries computed.")
+          else
+            msg = paste0("Exacel sheet '", sheet_name, "' found with non numeric easting and northing. No boundaries computed.")
+
           warning(msg)
           return(NULL)
         }
@@ -472,6 +480,26 @@ Plantation <- R6::R6Class("Plantation",
       self$clip()
 
       prog$tick(7,  detail = "Done")
+    },
+
+    optim_layout = function(progress = NULL)
+    {
+      if (is.null(self$layout)) stop("Missing: layout")
+      if (is.null(self$layout$block_layout_oriented)) stop("Missing: block layout")
+      if (is.null(self$layout$tree_layout_oriented))  stop("Missing: tree layout")
+      if (is.null(self$schm)) stop("Missing: smooth CHM")
+      if (is.null(self$layout$spacing)) stop("Missing: tree layouts spacing")
+      if (is.null(self$boundaries)) stop("Missing: plantation boundaries")
+
+      layout = self$layout$tree_layout_oriented
+      blocks = self$layout$block_layout_oriented
+      boundaries = self$boundaries
+      chm = self$schm
+      ws = self$layout$spacing
+
+      new_layout = layout_optimize_by_block(layout, blocks, chm, ws, boundaries, progress = progress)
+
+      self$layout$tree_layout_oriented = new_layout
     },
 
     align_layout = function(progress = NULL)
@@ -969,7 +997,7 @@ Plantation <- R6::R6Class("Plantation",
       use_proxy <- !is.null(proxy)
 
       if (!use_proxy) {
-        map <- make_base_map()
+        map <- make_base_map("")
       } else {
         map <- leaflet::leafletProxy(mapId, session = proxy)
       }

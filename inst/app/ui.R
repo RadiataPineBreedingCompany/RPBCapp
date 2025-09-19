@@ -260,6 +260,10 @@ ui <- page_navbar(
           actionButton("alignLayoutButton", "Align trees")
         ),
         wellPanel(
+          tags$p(tags$strong("Optimization by block")),
+          actionButton("optimBlockButton", "Optimize")
+        ),
+        wellPanel(
           tags$p(tags$strong("Run adjustment")),
           tooltiped("Run automatic adjustment", "The layout pattern is not 100% accurate. This step starts from the tree plantation layout and retrieve the real positions of the trees"),
           sliderInput("hminAdjustTreesSlider",

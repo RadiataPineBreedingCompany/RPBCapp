@@ -92,6 +92,8 @@ RPBCLayout <- R6::R6Class("Plantation",
       self$tree_layout_raw = generate_trees(self$block_layout_raw, block_size, num_trees, start = start, orientation = orientation)
       self$block_layout_oriented = self$block_layout_raw
       self$tree_layout_oriented = self$tree_layout_raw
+
+      self$move()
     },
 
     set_crs = function(crs)
@@ -107,6 +109,7 @@ RPBCLayout <- R6::R6Class("Plantation",
 
     set_origin = function(x,y)
     {
+      cat("set origin", x, y, "\n")
       M = self$M
       M[1,3] = x
       M[2,3] = y
@@ -124,11 +127,18 @@ RPBCLayout <- R6::R6Class("Plantation",
       if (self$from_geodatabase) return()
 
       self$M = M
+      self$move()
+
+    },
+
+    move = function()
+    {
+      if (self$from_geodatabase) return()
 
       crs = sf::st_crs(self$block_layout_raw)
 
-      self$block_layout_oriented <- st_affine(self$block_layout_raw, M)
-      self$tree_layout_oriented  <- st_affine(self$tree_layout_raw, M)
+      self$block_layout_oriented <- st_affine(self$block_layout_raw, self$M)
+      self$tree_layout_oriented  <- st_affine(self$tree_layout_raw, self$M)
       self$tree_layout_adjusted  <- NULL
       self$set_crs(crs)
     },

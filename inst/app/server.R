@@ -71,7 +71,8 @@ show_notification = function(msg)
   showNotification(msg)
 }
 
-short_path <- function(paths, max_chars = 40) {
+short_path <- function(paths, max_chars = 40)
+{
   sapply(paths, function(p) {
     if (is.na(p)) return(NA)
     # Short path is ok as is
@@ -148,10 +149,15 @@ server <- function(input, output, session)
 {
   plantation = Plantation$new()
 
-  update_layout_map  <- reactiveVal(0)
-  update_tree_map    <- reactiveVal(0)
-  update_preview_map <- reactiveVal(0)
-  update_chm_map     <- reactiveVal(0)
+  update_bbox_in_maps   <- reactiveVal(0)
+  update_bound_in_maps  <- reactiveVal(0)
+  update_layout_in_maps <- reactiveVal(0)
+  update_chm_in_maps    <- reactiveVal(0)
+  update_schm_in_maps   <- reactiveVal(0)
+  update_dtm_in_maps    <- reactiveVal(0)
+  update_trees_in_maps  <- reactiveVal(0)
+  update_debug_in_maps  <- reactiveVal(0)
+
   update_layout_plot <- reactiveVal(0)
   update_file_table  <- reactiveVal(0)
   update_state_table <- reactiveVal(0)
@@ -163,9 +169,7 @@ server <- function(input, output, session)
   output$estimatedDensityValue = renderText(NA)
   output$recommandedFractionValue = renderText(NA)
 
-  volumes <- c(RPBC = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/",
-               Home = fs::path_home(),
-               shinyFiles::getVolumes()())
+  volumes <- c(RPBC = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/", Home = fs::path_home(), shinyFiles::getVolumes()())
   shinyFiles::shinyFileChoose(input, "loadLasFileButton", roots = volumes, filetypes = c('las', "laz"))
   shinyFiles::shinyFileChoose(input, "loadCHMFileButton", roots = volumes, filetypes = c('tif', 'tiff'))
   shinyFiles::shinyFileChoose(input, "loadConfigFileButton", roots = volumes, filetypes = c('rpbc'))
@@ -176,17 +180,36 @@ server <- function(input, output, session)
 
   # ===== Init Map ====
 
-  output$mapTreeLayout <- leaflet::renderLeaflet({ make_base_map() })
-  output$mapPreview    <- leaflet::renderLeaflet({ make_base_map() })
-  output$mapCHM        <- leaflet::renderLeaflet({ make_base_map() })
-  output$mapTree       <- leaflet::renderLeaflet({ make_base_map() })
+  output$mapTreeLayout <- leaflet::renderLeaflet({
+    make_base_map(c("CHM", "sCHM", "Boundaries", "Block layout", "Move", "Warnings", "Tree layout")) |>
+      leaflet.extras::addDrawToolbar(
+        targetGroup = "Tree layout",
+        polylineOptions = FALSE, polygonOptions = FALSE,
+        circleOptions = FALSE, rectangleOptions = FALSE,
+        markerOptions = FALSE,
+        editOptions = leaflet.extras::editToolbarOptions()
+      )
+  })
+  output$mapPreview <- leaflet::renderLeaflet({
+    make_base_map(c("DTM", "CHM", "sCHM", "Boundaries", "Block layout", "Tree layout", "Bounding box"))
+  })
+  output$mapCHM <- leaflet::renderLeaflet({
+    make_base_map(c("DTM", "CHM", "sCHM", "Boundaries"))
+  })
+  output$mapTrees <- leaflet::renderLeaflet({
+    make_base_map(c("CHM", "sCHM", "Boundaries", "Block layout", "Trees", "Crowns"))
+  })
+
+  outputOptions(output, "mapTreeLayout", suspendWhenHidden = FALSE)
+  outputOptions(output, "mapPreview", suspendWhenHidden = FALSE)
+  outputOptions(output, "mapCHM", suspendWhenHidden = FALSE)
+  outputOptions(output, "mapTrees", suspendWhenHidden = FALSE)
 
   # ===== OnClick Create Project Button ====
 
   observeEvent(input$createProjectButton, {
 
     file <- shinyFiles::parseSavePath(volumes, input$createProjectButton)$datapath
-    print(file)
 
     if (!is.null(file) && length(file) > 0)
     {
@@ -262,11 +285,18 @@ server <- function(input, output, session)
 
     update_file_table(runif(1))
     update_state_table(runif(1))
-    update_layout_map(runif(1))
-    update_tree_map(runif(1))
-    update_chm_map(runif(1))
+
+    update_bbox_in_maps(runif(1))
+    update_bound_in_maps(runif(1))
+    update_layout_in_maps(runif(1))
+    update_chm_in_maps(runif(1))
+    update_schm_in_maps(runif(1))
+    update_dtm_in_maps(runif(1))
+    update_trees_in_maps(runif(1))
+    update_debug_in_maps(runif(1))
+
     update_rgl_view(runif(1))
-    update_preview_map(runif(1))
+
     update_stats_ui(runif(1))
     update_ggplots(runif(1))
 
@@ -275,12 +305,12 @@ server <- function(input, output, session)
   }, ignoreInit = TRUE)
 
   # ===== OnClick Load LAS File Button ====
+
   observeEvent(input$loadLasFileButton, {
 
     path <- shinyFiles::parseFilePaths(volumes, input$loadLasFileButton)$datapath
 
-    if (is.null(path) || length(path) == 0)
-      return(NULL)
+    if (is.null(path) || length(path) == 0) return(NULL)
 
     safe_run({
       plantation$set_cloud(path)
@@ -303,7 +333,7 @@ server <- function(input, output, session)
         updateSliderInput(session, "keepRandomFraction", value = f)
       }
 
-      update_preview_map(runif(1))
+      update_bbox_in_maps(runif(1))
       update_state_table(runif(1))
       update_file_table(runif(1))
     })
@@ -328,10 +358,11 @@ server <- function(input, output, session)
         input$partternStartChoiceRadioButton,
         input$partternOrientationChoiceRadioButton)
 
+      update_bound_in_maps(runif(1))
+      update_layout_in_maps(runif(1))
       update_file_table(runif(1))
       update_state_table(runif(1))
       update_layout_plot(runif(1))
-      update_preview_map(runif(1))
     }, catch_warnings = TRUE)
   }, ignoreInit = TRUE)
 
@@ -347,7 +378,7 @@ server <- function(input, output, session)
 
     safe_run({
       plantation$set_boundaries(file)
-      update_preview_map(runif(1))
+      update_bound_in_maps(runif(1))
       update_file_table(runif(1))
       update_state_table(runif(1))
     })
@@ -363,8 +394,7 @@ server <- function(input, output, session)
 
     safe_run({
       plantation$set_chm(file)
-      update_preview_map(runif(1))
-      update_chm_map(runif(1))
+      update_chm_in_maps(runif(1))
       update_file_table(runif(1))
       update_state_table(runif(1))
     })
@@ -382,9 +412,7 @@ server <- function(input, output, session)
       plantation$set_layout(file)
       update_file_table(runif(1))
       update_state_table(runif(1))
-      update_tree_map(runif(1))
-      update_layout_map(runif(1))
-      update_preview_map(runif(1))
+      update_layout_in_maps(runif(1))
     })
   })
 
@@ -395,10 +423,26 @@ server <- function(input, output, session)
     safe_run({
       show_notification("Smoothing CHM")
       plantation$smooth_chm(input$smoothCHM, input$smoothPasses)
-      update_chm_map(runif(1))
+      update_schm_in_maps(runif(1))
       update_file_table(runif(1))
     })
   })
+
+
+
+  # ===== OnClick Optim Block Button ====
+
+  observeEvent(input$optimBlockButton, {
+
+    show_notification("Optim layout by block")
+
+    safe_run({
+      withProgress(message = 'Tree detection', value = 0, {
+        plantation$optim_layout(incProgress)
+      })
+      update_layout_in_maps(runif(1))
+    })
+  }, ignoreInit = TRUE)
 
   # ===== OnClick Align Layout Button ====
 
@@ -410,7 +454,7 @@ server <- function(input, output, session)
       withProgress(message = 'Tree detection', value = 0, {
         plantation$align_layout(incProgress)
       })
-      update_layout_map(runif(1))
+      update_layout_in_maps(runif(1))
       update_state_table(runif(1))
     })
   }, ignoreInit = TRUE)
@@ -430,7 +474,8 @@ server <- function(input, output, session)
       withProgress(message = 'Tree detection', value = 0, {
         plantation$adjust_layout(hmin, progress = incProgress)
       })
-      update_layout_map(runif(1))
+      update_layout_in_maps(runif(1))
+      update_debug_in_maps(runif(1))
     })
   }, ignoreInit = TRUE)
 
@@ -456,7 +501,7 @@ server <- function(input, output, session)
       })
 
       update_file_table(runif(1))
-      update_tree_map(runif(1))
+      update_trees_in_maps(runif(1))
       update_state_table(runif(1))
       update_stats_ui(runif(1))
       update_ggplots(runif(1))
@@ -467,12 +512,12 @@ server <- function(input, output, session)
 
   observeEvent(input$mapTreeLayout_draw_edited_features, {
 
-    if (is.null(edits))
-      return(NULL)
-
     show_notification("SVD alignment")
 
     edits <- input$mapTreeLayout_draw_edited_features
+
+    if (is.null(edits))
+      return(NULL)
 
     safe_run({
       geojson <- jsonlite::toJSON(edits, auto_unbox = TRUE, digits = 8)
@@ -488,7 +533,7 @@ server <- function(input, output, session)
       M <- layout_alignment_svd(Mlocal, Mglobal)
       plantation$layout$set_matrix(M)
 
-      update_layout_map(runif(1))
+      update_layout_in_maps(runif(1))
     })
   })
 
@@ -510,7 +555,9 @@ server <- function(input, output, session)
           smoothPasses = input$smoothPasses,
           progress = incProgress)
 
-        update_preview_map(runif(1))
+        update_dtm_in_maps(runif(1))
+        update_chm_in_maps(runif(1))
+        update_schm_in_maps(runif(1))
         update_rgl_view(runif(1))
       })
     })
@@ -561,6 +608,8 @@ server <- function(input, output, session)
         input$treeNumberInput,
         input$partternStartChoiceRadioButton,
         input$partternOrientationChoiceRadioButton)
+
+      plantation$layout$move()
 
       update_layout_plot(runif(1))
     },
@@ -615,14 +664,18 @@ server <- function(input, output, session)
 
   observeEvent(input$reload, {
     show_notification("Refreshing app")
-    cat("Refreshing app\n")
+
     update_file_table(runif(1))
     update_state_table(runif(1))
-    update_layout_map(runif(1))
-    update_tree_map(runif(1))
-    update_chm_map(runif(1))
+
+    update_dtm_in_maps(runif(1))
+    update_chm_in_maps(runif(1))
+    update_schm_in_maps(runif(1))
+    update_layout_in_maps(runif(1))
+    update_trees_in_maps(runif(1))
+
     update_rgl_view(runif(1))
-    update_preview_map(runif(1))
+
     update_stats_ui(runif(1))
     update_ggplots(runif(1))
   })
@@ -653,33 +706,73 @@ server <- function(input, output, session)
 
   # ===== update maps ====
 
-  output$mapTreeLayout <- leaflet::renderLeaflet({
-    show_notification("Updating layout map")
-    update_layout_map()
-    plantation$show_layout(edit = "Tree layout")
+  observeEvent(update_bbox_in_maps(), {
+    # Update mapPreview with bbox layer
+    proxy <- leaflet::leafletProxy("mapPreview")
+    add_bbox_layer(proxy, plantation$bbox, proxy = TRUE)
+    center_on_object(proxy, plantation$bbox)
+
+    # Just center the other maps (no new layer)
+    for (map_id in c("mapCHM", "mapTrees", "mapTreeLayout")) {
+      proxy <- leaflet::leafletProxy(map_id)
+      center_on_object(proxy, plantation$bbox)
+    }
   })
 
-  output$mapTrees <- leaflet::renderLeaflet({
-    show_notification("Updating tree map")
-    update_tree_map()
-    plantation$show_trees()
+  observeEvent(update_bound_in_maps(), {
+    for (map_id in c("mapPreview", "mapCHM", "mapTrees", "mapTreeLayout")) {
+      proxy <- leaflet::leafletProxy(map_id)
+      add_boundaries_layer(proxy, plantation$boundaries, proxy = TRUE)
+    }
   })
 
-  output$mapCHM <- leaflet::renderLeaflet({
-    show_notification("Updating CHM map")
-    update_chm_map()
-    plantation$show_chm()
+  observeEvent(update_layout_in_maps(), {
+    for (map_id in c("mapPreview", "mapTreeLayout")) {
+      proxy <- leaflet::leafletProxy(map_id)
+      add_block_layout_layer(proxy, plantation$layout, proxy = TRUE)
+      add_tree_layout_layer(proxy, plantation$layout, proxy = TRUE)
+    }
   })
 
+  observeEvent(update_chm_in_maps(), {
+    for (map_id in c("mapPreview", "mapCHM", "mapTrees", "mapTreeLayout")) {
+      proxy <- leaflet::leafletProxy(map_id)
+      add_chm_layer(proxy, plantation$chm, proxy = TRUE)
+    }
+  })
 
-  output$mapPreview <- leaflet::renderLeaflet({
-    show_notification("Updating preview map")
-    update_preview_map()
-    plantation$leaflet(dtm = FALSE, chm = TRUE, schm = TRUE, bound = TRUE,
-                       bbox = TRUE, trees = FALSE, crowns = FALSE, layout = TRUE)
+  observeEvent(update_schm_in_maps(), {
+    for (map_id in c("mapPreview", "mapCHM", "mapTrees", "mapTreeLayout")) {
+      proxy <- leaflet::leafletProxy(map_id)
+      add_schm_layer(proxy, plantation$schm, proxy = TRUE)
+    }
+  })
+
+  observeEvent(update_schm_in_maps(), {
+    for (map_id in c("mapPreview", "mapCHM")) {
+      proxy <- leaflet::leafletProxy(map_id)
+      add_dtm_layer(proxy, plantation$dtm, proxy = TRUE)
+    }
+  })
+
+  observeEvent(update_trees_in_maps(), {
+    for (map_id in c("mapTrees")) {
+      proxy <- leaflet::leafletProxy(map_id)
+      add_trees_layer(proxy, plantation$trees, proxy = TRUE)
+      add_crowns_layer(proxy, plantation$crowns, proxy = TRUE)
+    }
+  })
+
+  observeEvent(update_debug_in_maps(), {
+    for (map_id in c("mapPreview")) {
+      proxy <- leaflet::leafletProxy(map_id)
+      add_warnings_layer(proxy, plantation$layout_warnings, proxy = TRUE)
+      add_crowns_layer(proxy, plantation$crowns, proxy = TRUE)
+    }
   })
 
   # ===== update table ====
+
   output$fileTable <- DT::renderDT({
     update_file_table()
     files_df = plantation$get_file_table()
@@ -695,8 +788,7 @@ server <- function(input, output, session)
   })
 
   # Modal to show full path when row clicked
-  observeEvent(input$fileTable_rows_selected,
-  {
+  observeEvent(input$fileTable_rows_selected, {
     selected_row <- input$fileTable_rows_selected
     if (length(selected_row) == 0) return()
 
@@ -706,10 +798,15 @@ server <- function(input, output, session)
     cat("Showing:", full_path, "\n")
 
     showModal(modalDialog(
-      title = paste("Full path"),
-      full_path,
+      title = "Full path",
+      div(
+        style = "width: 90vw; max-height: 200px; overflow: auto;",
+        p(full_path)
+      ),
       easyClose = TRUE,
-      footer = NULL
+      footer = NULL,
+      size = "l",
+      fade = FALSE
     ))
   })
 
@@ -740,8 +837,7 @@ server <- function(input, output, session)
     )
   })
 
-  observeEvent(input$stateTable_rows_selected,
-  {
+  observeEvent(input$stateTable_rows_selected, {
     selected_row <- input$stateTable_rows_selected
     if (length(selected_row) == 0) return()
 
@@ -755,36 +851,43 @@ server <- function(input, output, session)
                   plantation$crowns
     )
 
-    # Show modal depending on type
-    if (inherits(out, "SpatRaster") | inherits(out, "sfc"))
-    {
+    # For SpatRaster or sf objects
+    if (inherits(out, "SpatRaster") | inherits(out, "sfc") | inherits(out, "sf")) {
       showModal(modalDialog(
         title = paste(class(out)[1], "object"),
-        verbatimTextOutput("modalRasterText"),
+        verbatimTextOutput("modalText"),
         easyClose = TRUE,
-        footer = NULL
+        footer = NULL,
+        size = "l",
+        fade = FALSE
       ))
 
-      output$modalRasterText <- renderPrint({print(out)})
-
+      output$modalText <- renderPrint({ print(out) })
     }
-    else if (inherits(out, "sf") || is.data.frame(out))
-    {
+    # For data.frames
+    else if (is.data.frame(out)) {
       showModal(modalDialog(
-        title = paste("sf object"),
+        title = paste("Data Frame"),
         div(
-          style = "overflow-y: auto; max-height: 1000px; max-width: 1000px",
-          DT::DTOutput("modalsfTable")   # <-- UI placeholder
+          style = "width: 90vw; height: 80vh; overflow: auto;",  # <-- bigger modal
+          DT::DTOutput("modalsfTable")
         ),
         easyClose = TRUE,
         footer = NULL,
-        size = "l"  # large modal
+        size = "l",
+        fade = FALSE
       ))
 
-      output$modalsfTable <- DT::renderDT({ out }, options = list(pageLength = 10, scrollX = TRUE, scrollY = "500px"))
+      output$modalsfTable <- DT::renderDT({
+        out
+      }, options = list(
+        pageLength = 20,
+        scrollX = TRUE,
+        scrollY = "70vh",  # use viewport height to make it responsive
+        autoWidth = TRUE
+      ))
     }
-    else
-    {
+    else {
       showModal(modalDialog(
         title = "Unsupported type",
         paste("Cannot display object of class:", class(out)),
@@ -816,6 +919,7 @@ server <- function(input, output, session)
   })
 
   # === update ui ====
+
   output$vb_found <- renderUI({
     update_stats_ui()
 

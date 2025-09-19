@@ -38,7 +38,7 @@ self = Plantation$new()
 self$set_chm(chm)
 self$leaflet()
 
-conf = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/example_load_project/19BP01_ULS_subsampled.rpbc"
+conf = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/BC52_1/BC52_1_Kinleith.rpbc"
 conf = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/example_new_project/19BP01.rpbc"
 self = Plantation$new()
 self$read_config(conf)
@@ -240,43 +240,24 @@ self$leaflet()
 
 
 
-conf = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/BC66_2/BC66_2_Kaingaroa.rpbc"
+conf = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/BC52_3/BC52_3_Rotu_2024.rpbc"
 self = Plantation$new()
 self$read_config(conf)
+self$optim_layout()
 self$show_layout()
-self$set_crs(2193)
-self$set_database(conf)
-block_size <- 18.6
-num_trees <- 6
-self$set_layout_parameter(block_size, num_trees, "bl", "v")
-self$layout$plot()
-self$layout$tree_layout_raw
-self$layout$tree_layout_oriented
 
-self$adjust_layout()
+layout = self$layout$tree_layout_oriented
+blocks = self$layout$block_layout_oriented
+boundaries = self$boundaries
+chm = self$schm
+ws = 3
 
-self$layout$tree_layout_raw
-self$layout$tree_layout_oriented
-self$trees
-self$measure_trees(4.5)
 
-self$trees
 
-Ml = structure(c(2, 406, 1.5, 1.5), dim = c(2L, 2L), dimnames = list(
-  NULL, c("X", "Y")))
 
-Mg = structure(c(1670235.79958831, 1670641.95132854, 6028038.96566213,
-            6028035.72226342), dim = c(2L, 2L), dimnames = list(NULL, c("X",
-                                                                        "Y")))
+new_layout = layout_optimize_by_block(layout, blocks, chm, ws, boundaries, progress = NULL)
 
-plot(RPBCapp:::remove_virtual_trees(self$layout$tree_layout_raw)$geometry, cex = 0.5)
-points(Ml)
+plot(layout$geometry, cex = 0.2, axes = TRUE)
+plot(new_layout$geometry, cex = 0.2, col = "blue", add = TRUE)
+plot(new_layout$geometry, cex = 0.2, col = "blue")
 
-M = layout_alignment_svd(Ml, Mg)
-
-terra::plot(self$chm)
-plot(self$boundaries,add = T)
-points(Mg)
-
-self$layout$set_matrix(M)
-plot(RPBCapp:::remove_virtual_trees(self$layout$tree_layout_oriented), add = T)
