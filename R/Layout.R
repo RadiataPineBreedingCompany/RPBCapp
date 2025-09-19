@@ -12,13 +12,12 @@ RPBCLayout <- R6::R6Class("Plantation",
 
     crs = NULL,
 
-    origin = c(0,0),
-    angle = 0,
+    M = diag(3),
     orientation = 'v',
     start = "bl",
-    block_size = NA,
-    num_trees = NA,
-    spacing = NA,
+    block_size = 18.6,
+    num_trees = 6,
+    spacing = 3.1,
 
     from_geodatabase = FALSE,
 
@@ -108,53 +107,54 @@ RPBCLayout <- R6::R6Class("Plantation",
 
     set_origin = function(x,y)
     {
-      self$origin = c(x,y)
-      self$move()
+      M = self$M
+      M[1,3] = x
+      M[2,3] = y
+      self$set_matrix(M)
     },
 
-    set_angle = function(angle)
-    {
-      self$angle = angle
-      self$move()
-    },
+    #set_angle = function(angle)
+    #{
+    #  self$angle = angle
+    #  self$move()
+    #},
 
     set_matrix = function(M)
     {
       if (self$from_geodatabase) return()
 
+      self$M = M
+
       crs = sf::st_crs(self$block_layout_raw)
 
       self$block_layout_oriented <- st_affine(self$block_layout_raw, M)
-      self$tree_layout_oriented <- st_affine(self$tree_layout_raw, M)
-
+      self$tree_layout_oriented  <- st_affine(self$tree_layout_raw, M)
+      self$tree_layout_adjusted  <- NULL
       self$set_crs(crs)
     },
 
-    move = function()
-    {
-      if (self$from_geodatabase) return()
-
-      crs = sf::st_crs(self$block_layout_raw)
-
-      angle = self$angle
-      translate = self$origin
-      tree_zero = self$tree_layout_raw
-      tree_zero = tree_zero[tree_zero[[BLOCKNAME]] == 1 & tree_zero[[TPOSNAME]] == 1, ]
-      tree_zero = as.numeric(sf::st_coordinates(sf::st_geometry(tree_zero)))
-      offset = tree_zero
-      translate = translate - offset
-
-      self$block_layout_oriented <- rotate_sf(self$block_layout_raw, angle, offset)
-      self$tree_layout_oriented <- rotate_sf(self$tree_layout_raw, angle, offset)
-
-      shift = sf::st_sfc(sf::st_point(translate))
-      self$block_layout_oriented = sf::st_set_geometry(self$block_layout_oriented, sf::st_geometry(self$block_layout_oriented) + shift)
-      self$tree_layout_oriented = sf::st_set_geometry(self$tree_layout_oriented,  sf::st_geometry(self$tree_layout_oriented) + shift)
-
-      self$set_crs(crs)
-      #plot(self$tree_layout_raw$geometry, col = "red", axes = T)
-      #plot(self$tree_layout_oriented$geometry, col = "blue")
-    },
+    # move = function()
+    # {
+    #   if (self$from_geodatabase) return()
+    #
+    #   crs = sf::st_crs(self$block_layout_raw)
+    #
+    #   angle     = self$angle
+    #   translate = self$origin
+    #   offset    = find_tree_zero(self$tree_layout_raw)
+    #   translate = translate - offset
+    #
+    #   self$block_layout_oriented <- rotate_sf(self$block_layout_raw, angle, offset)
+    #   self$tree_layout_oriented <- rotate_sf(self$tree_layout_raw, angle, offset)
+    #
+    #   shift = sf::st_sfc(sf::st_point(translate))
+    #   self$block_layout_oriented = sf::st_set_geometry(self$block_layout_oriented, sf::st_geometry(self$block_layout_oriented) + shift)
+    #   self$tree_layout_oriented = sf::st_set_geometry(self$tree_layout_oriented,  sf::st_geometry(self$tree_layout_oriented) + shift)
+    #
+    #   self$set_crs(crs)
+    #   #plot(self$tree_layout_raw$geometry, col = "red", axes = T)
+    #   #plot(self$tree_layout_oriented$geometry, col = "blue")
+    # },
 
     plot = function(show_buffer_block = FALSE)
     {

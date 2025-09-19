@@ -146,35 +146,69 @@ Plantation <- R6::R6Class("Plantation",
         # Case when the sheet contains a screenshoot of coordinates...
         if (nrow(boundaries) == 0)
         {
-          warning(paste0("'", sheet_name, "' Excel sheet found but contains no data"))
+          warning(paste0("'", sheet_name, "' Excel sheet found but contains no data. No boundaries computed."))
           return(NULL)
         }
 
         message("Detection of an Excel sheet with the boundaries")
 
         # Now we can try to read the long lat coordinates. Failure is allowed. Then no boundaries
-        long = df_find_column(boundaries, LONGITUDECOLNAMES, mustWork = FALSE)
+        lon = df_find_column(boundaries, LONGITUDECOLNAMES, mustWork = FALSE)
         lat = df_find_column(boundaries, LATITUDECOLNAMES, mustWork = FALSE)
 
-        if (is.null(long) | is.null(lat))
+        east = df_find_column(boundaries, EASTINGCOLNAMES, mustWork = FALSE)
+        north = df_find_column(boundaries, NORTHINGCOLNAMES, mustWork = FALSE)
+
+        ans = validate_coordinates(lon, lat, east, north)
+
+        if (ans == "invalid")
         {
-          warning(paste0("'", sheet_name, "' Excel sheet found but no long lat data"))
+          if (!is.null(lon) & is.null(lat))
+            warning(paste0("'", sheet_name, "' Excel sheet found with longitude but no latitude. No boundaries computed."))
+          else if (is.null(lon) & !is.null(lat))
+            warning(paste0("'", sheet_name, "' Excel sheet found with latitude but no longitude. No boundaries computed."))
+          else if (!is.null(east) & is.null(north))
+            warning(paste0("'", sheet_name, "' Excel sheet found with easting but no northing No boundaries computed."))
+          else if (is.null(east) & !is.null(north))
+            warning(paste0("'", sheet_name, "' Excel sheet found with northing but no easting. No boundaries computed."))
+          else
+            warning(paste0("'", sheet_name, "' Excel sheet found but no valid data. No boundaries computed."))
           return(NULL)
         }
 
-        long = boundaries[[long]]
-        lat = boundaries[[lat]]
-        boundaries = cbind(long, lat)
+        if (ans == "projected")
+        {
+          x = boundaries[[east]]
+          y = boundaries[[north]]
+          crs = self$crs
+        }
+
+        if (ans == "lonlat")
+        {
+          x = boundaries[[lon]]
+          y = boundaries[[lat]]
+          crs = 4326
+        }
+
+        if (!is.numeric(x) | !is.numeric(y))
+        {
+          msg = paste0("'", sheet_name, "' Excel sheet found with non numeric coordinates. No boundaries computed.")
+          warning(msg)
+          return(NULL)
+        }
+
+        boundaries = cbind(x, y)
         boundaries = rbind(boundaries, boundaries[1,])
         boundaries = sf::st_polygon(list(boundaries))
         boundaries = sf::st_sfc(boundaries)
-        sf::st_crs(boundaries) = 4326
-        boundaries = sf::st_make_valid(boundaries)
+        sf::st_crs(boundaries) = crs
+        #boundaries = sf::st_make_valid(boundaries)
         valid = sf::st_is_valid(boundaries)
 
         if (!valid)
         {
-          stop(paste0("The polygon read from the Excel in sheet '", sheet_name, "' is not valid"))
+          warning(paste0("The polygon read from the Excel database in sheet '", sheet_name, "' is not valid. No boundaries computed."))
+          return(NULL)
         }
 
         # Yay!! we have a boundary!
@@ -192,6 +226,21 @@ Plantation <- R6::R6Class("Plantation",
         if (sf::st_crs(boundaries) != self$crs)
         {
           boundaries = sf::st_transform(boundaries, self$crs)
+        }
+      }
+
+      if (!is.null(self$bbox))
+      {
+        b = sf::st_intersects(boundaries, self$bbox, sparse = FALSE) |> any()
+
+        if (!b)
+        {
+          if (ans == "projected")
+            warning(paste0("The bounding box of the point cloud and the boundaries read from the Excel database in sheet '", sheet_name, "' are not intersecting. Maybe the coordinates are not in the same CRS as the point cloud. No boundaries computed."))
+          else
+            warning(paste0("The bounding box of the point cloud and the boundaries read from the Excel database in sheet '", sheet_name, "' are not intersecting.  No boundaries computed."))
+
+          return(NULL)
         }
       }
 
@@ -269,7 +318,7 @@ Plantation <- R6::R6Class("Plantation",
       database = readxl::read_excel(file, sheet = sheet_name)
 
       # Fix the standard
-      names(db)[names(db) == "Pset(Block)"] <- BLOCKNAME
+      names(database)[names(database) == "Pset(Block)"] <- BLOCKNAME
 
       # Assert standard validity
       df_find_column(database, BLOCKNAME, mustWork = TRUE)
@@ -316,7 +365,6 @@ Plantation <- R6::R6Class("Plantation",
       if (is.null(self$layout))
         stop("No 'layout' object yet. Read and Excel file first")
 
-      print(block_size)
       stopifnot(!anyNA(block_size), !is.na(num_trees), !is.na(start[1]), !is.na(orientation))
 
       # Construction of the layout
@@ -324,7 +372,7 @@ Plantation <- R6::R6Class("Plantation",
       self$layout$set_crs(self$crs)
 
       # The layout is originally at (0,0). Find an arbitrary origin such as it is visible on the map.
-      if (all(self$layout$origin == c(0,0)))
+      if (self$layout$M[1,3] == 0 & self$layout$M[2,3] == 0)
       {
         origin = c(0,0)
         if (!is.null(self$boundaries)) {
@@ -426,28 +474,31 @@ Plantation <- R6::R6Class("Plantation",
       prog$tick(7,  detail = "Done")
     },
 
-    align_layout = function()
+    align_layout = function(progress = NULL)
     {
-      if (is.null(self$layout$tree_layout_oriented))  stop("Missing: tree layout")
+      if (is.null(self$layout)) stop("Missing: layout")
+      if (is.null(self$layout$M)) stop("Missing: affine matrix")
+      if (is.null(self$layout$block_layout_raw)) stop("Missing: block layout")
+      if (is.null(self$layout$tree_layout_raw))  stop("Missing: tree layout")
       if (is.null(self$schm)) stop("Missing: smooth CHM")
-      if (is.null(self$layout$origin)) stop("Missing: tree layout's origin")
-      if (is.null(self$layout$spacing)) stop("Missing: tree layout'$'s spacing")
+      if (is.null(self$layout$spacing)) stop("Missing: tree layouts spacing")
       if (is.null(self$boundaries)) stop("Missing: plantation boundaries")
 
-      res = layout_alignment_lm(
-        self$layout$tree_layout_raw,
-        self$schm,
-        self$layout$origin,
-        self$layout$spacing*0.75,
-        self$boundaries)
-      angle = res[1]
-      tx = res[2]
-      ty = res[3]
-      origin = self$layout$origin
-      origin[1] = origin[1] + tx
-      origin[2] = origin[2] + ty
-      self$layout$set_angle(-angle)
-      self$layout$set_origin(origin[1], origin[2])
+
+      layout = self$layout$tree_layout_raw
+      chm = self$schm
+      ws = self$layout$spacing*0.75
+      boundaries = self$boundaries
+      pivot = as.numeric(self$layout$M[1:2,3])
+
+      M = layout_alignment_lm(layout, chm, pivot, ws, boundaries, progress)
+      self$layout$set_matrix(M)
+
+      self$trees  <- NULL
+      self$crowns <- NULL
+      self$layout_warnings <- NULL
+
+      self$write_config()
     },
 
     adjust_layout = function(hmin = 2, progress = NULL)
@@ -471,7 +522,7 @@ Plantation <- R6::R6Class("Plantation",
       self$layout_warnings = validate_tree(self$layout$tree_layout_adjusted, plan, spacing, hmin)
 
       if (is.null(self$fdebug))
-        self$fdebug = paste0(self$wd,  "/debug.gpkg")
+        self$fdebug = paste0(self$wd,  "/output/debug.gpkg")
 
       if (file.exists(self$fdebug))
         file.remove(self$fdebug)
@@ -481,12 +532,13 @@ Plantation <- R6::R6Class("Plantation",
         sf::st_write(self$layout_warnings$warn, dsn = self$fdebug, layer = "warnings", quiet = TRUE, append = FALSE)
 
       if (is.null(self$fplan))
-        self$fplan = paste0(self$wd,  "/plan_layout.gpkg")
+        self$fplan = paste0(self$wd,  "/output/plan_layout.gpkg")
 
       if (file.exists(self$fplan))
         file.remove(self$fplan)
 
       sf::st_write(self$layout$tree_layout_adjusted, dsn = self$fplan, layer = "trees", quiet = TRUE, append = FALSE)
+      sf::st_write(self$layout$block_layout_oriented, dsn = self$fplan, layer = "block", quiet = TRUE, append = FALSE)
 
       self$params$treesHmin = hmin
       self$write_config()
@@ -513,7 +565,7 @@ Plantation <- R6::R6Class("Plantation",
       self$crowns = self$joint_database(ans$crowns)
 
       if (is.null(self$fmeasurements))
-        self$fmeasurements = paste0(self$wd,  "/tree_measurements.gpkg")
+        self$fmeasurements = paste0(self$wd,  "/output/tree_measurements.gpkg")
 
       if (file.exists(self$fmeasurements))
           file.remove(self$fmeasurements)
@@ -779,7 +831,7 @@ Plantation <- R6::R6Class("Plantation",
       # Save on disk
       if (!is.null(self$wd))
       {
-        self$fdtm = paste0(self$wd, "/dtm.tif")
+        self$fdtm = paste0(self$wd, "/output/dtm.tif")
         terra::writeRaster(dtm, self$fdtm, overwrite = TRUE)
         self$dtm = terra::rast(self$fdtm)
       }
@@ -795,16 +847,18 @@ Plantation <- R6::R6Class("Plantation",
       assert_point_cloud_loaded(self$las)
 
       chm = lidR::rasterize_canopy(self$las, res)
-      chm = lidR::pitfill_stonge2008(chm)
 
       dtm = self$dtm
-      dtm <- terra::resample(dtm, chm, method = "bilinear")  # or "near" if categorical
+      dtm <- terra::resample(dtm, chm, method = "bilinear")
+
+      chm[is.na(chm)] = dtm[is.na(chm)]
       chm = chm - dtm
+      chm = lidR::pitfill_stonge2008(chm)
 
       # Save on disk
       if (!is.null(self$wd))
       {
-        self$fchm = paste0(self$wd, "/chm.tif")
+        self$fchm = paste0(self$wd, "/output/chm.tif")
         terra::writeRaster(chm, self$fchm, overwrite = TRUE)
         self$chm = terra::rast(self$fchm)
       }
@@ -854,7 +908,7 @@ Plantation <- R6::R6Class("Plantation",
       # Save on disk
       if (!is.null(self$wd))
       {
-        self$fschm = paste0(self$wd, "/schm.tif")
+        self$fschm = paste0(self$wd, "/output/schm.tif")
         terra::writeRaster(schm, self$fschm, overwrite = TRUE)
         self$schm = terra::rast(self$fschm)
       }
@@ -871,10 +925,30 @@ Plantation <- R6::R6Class("Plantation",
         bound = self$boundaries
         bound = terra::vect(self$boundaries)
         bound = terra::buffer(bound, buffer)
-        if (!is.null(self$dtm)) self$dtm  = terra::crop(self$dtm, bound)
-        if (!is.null(self$chm)) self$chm  = terra::crop(self$chm, bound)
-        if (!is.null(self$schm))self$schm = terra::crop(self$schm, bound)
-        if (!is.null(self$las)) self$las  = lidR::clip_roi(self$las, sf::st_as_sf(bound))
+
+        if (!is.null(self$dtm))
+        {
+          self$dtm  = terra::crop(self$dtm, bound)
+          self$dtm = terra::mask(self$dtm, bound)
+        }
+
+        if (!is.null(self$chm))
+        {
+          self$chm  = terra::crop(self$chm, bound)
+          self$chm = terra::mask(self$chm, bound)
+        }
+
+        if (!is.null(self$schm))
+        {
+          self$schm  = terra::crop(self$schm, bound)
+          self$schm = terra::mask(self$schm, bound)
+        }
+
+        if (!is.null(self$las))
+        {
+          cat("Clipping point cloud")
+          self$las  = lidR::clip_roi(self$las, sf::st_as_sf(bound))
+        }
       }
     },
 
@@ -883,230 +957,127 @@ Plantation <- R6::R6Class("Plantation",
       return(!is.null(self$layout$tree_layout_adjusted))
     },
 
-    leaflet = function(edit = NULL, dtm = TRUE, chm = TRUE, schm = TRUE, bbox = TRUE, trees = TRUE, layout = TRUE)
-    {
-      map = leaflet::leaflet() |>
-        leaflet::addProviderTiles(
-          leaflet::providers$Esri.WorldImagery,
-          options = leaflet::providerTileOptions(minZoom = 2, maxZoom = 22)
-        )
-
-      overlayGroups = c()
-
-      # ------ add rasters -----
-
-      if (!is.null(self$dtm) & dtm)
-      {
-        dtm_prod <- terra::terrain(self$dtm, v = c("slope", "aspect"), unit = "radians")
-        dtm_hillshade <- terra::shade(slope = dtm_prod$slope, aspect = dtm_prod$aspect)
-        dtm_hillshade <- terra::stretch(dtm_hillshade, minq = 0.02, maxq = 0.98)
-        dtm_val = terra::values(dtm_hillshade)
-        dtm_pal <- leaflet::colorNumeric(gray.colors(10,0,1), dtm_val, na.color = "transparent")
-
-        map = map |> leaflet::addRasterImage(dtm_hillshade, colors = dtm_pal, group = "DTM", maxBytes = 2000000)
-        overlayGroups = c(overlayGroups, "DTM")
-      }
-
-      if (!is.null(self$schm) & schm)
-      {
-        if (terra::inMemory(self$schm))
-        {
-          o = tempfile(fileext = ".tif")
-          terra::writeRaster(self$schm, o, overwrite = TRUE)
-          self$schm = terra::rast(o)
-        }
-
-        file = terra::sources(self$schm)
-
-        map = map |>
-          leafem::addGeotiff(
-            file,
-            colorOptions = leafem::colorOptions(palette = lidR::height.colors(20), na.color = "transparent"),
-            resolution = 128,
-            layerId = 1,
-            group = "sCHM")
-        overlayGroups = c(overlayGroups, "sCHM")
-      }
-
-      if (!is.null(self$chm) & chm)
-      {
-        if (terra::inMemory(self$chm))
-        {
-          o = tempfile(fileext = ".tif")
-          terra::writeRaster(self$chm, o, overwrite = TRUE)
-          self$chm = terra::rast(o)
-        }
-
-        file = terra::sources(self$chm)
-
-        map = map |>
-          leafem::addGeotiff(
-            file,
-            colorOptions = leafem::colorOptions(palette = lidR::height.colors(20), na.color = "transparent"),
-            resolution = 128,
-            layerId = 0,
-            group = "CHM")
-        overlayGroups = c(overlayGroups, "CHM")
-      }
-
-      # ------ add polygons and lines -----
-
-      if (!is.null(self$bbox) & bbox)
-      {
-        data = sf::st_transform(self$bbox, 4326)
-        map = map |> leaflet::addPolygons(data = data, group = "Point cloud", color = "red", fill = FALSE)
-        overlayGroups = c(overlayGroups, "Point cloud")
-      }
-
-      if (!is.null(self$boundaries))
-      {
-        data = sf::st_transform(self$boundaries, 4326)
-        map = map |> leaflet::addPolygons(data = data, group = "Boundaries",  color = "green", fill = FALSE)
-        overlayGroups = c(overlayGroups, "Boundaries")
-      }
-
-      if (!is.null(self$layout$block_layout_oriented) & layout)
-      {
-        data = sf::st_transform(self$layout$block_layout_oriented, 4326)
-        data = data[data$BlockID > 0, ]
-        map = map |> leaflet::addPolygons(data = data, group = "Block layout",  color = "black", fill = FALSE, weight = 3)
-        overlayGroups = c(overlayGroups, "Block layout")
-      }
-
-      if (!is.null(self$layout_warnings) & layout)
-      {
-        data = sf::st_transform(self$layout_warnings$move, 4326)
-        map = map |> leaflet::addPolylines(data = data, group = "Move", color = "white", fill = FALSE, weight = 2, opacity = 0.9)
-        overlayGroups = c(overlayGroups, "Move")
-
-        if (!is.null(self$layout_warnings$warn))
-        {
-          reason = self$layout_warnings$warn$reason
-          pal <- leaflet::colorFactor(palette = c('yellow', 'green'), domain = reason)
-
-          data = sf::st_transform(self$layout_warnings$warn, 4326)
-          map = map |> leaflet::addPolygons(data = data, opacity = 0.9, group = "Warnings", color = ~pal(reason), fill = FALSE, weight = 3)
-          overlayGroups = c(overlayGroups, "Warnings")
-
-          map = map |>
-            leaflet::addLegend(
-              position = "bottomleft",
-              pal = pal,
-              values = reason,
-              title = "Warnings"
-            )
-        }
-      }
-
-      if (!is.null(self$crowns) & trees)
-      {
-        data = sf::st_transform(self$crowns, 4326)
-        data = data[!sf::st_is_empty(data),]
-        map = map |> leaflet::addPolygons(data = data, color = "gray", fill = FALSE, opacity = 0.5, weight = 1, group = "Crowns")
-        overlayGroups = c(overlayGroups, "Crowns")
-      }
-
-      # ------- add markers ------
-
-      if (!is.null(self$layout) & layout)
-      {
-        if (!is.null(self$layout$tree_layout_adjusted))
-          data = sf::st_transform(self$layout$tree_layout_adjusted, 4326)
-        else
-          data = sf::st_transform(self$layout$tree_layout_oriented, 4326)
-
-        data = remove_virtual_trees(data)
-
-        if (!is.null(data$ApexFound))
-        {
-          col = ifelse(data$ApexFound, "green", "red")
-          col = ifelse(data$TreeFound & !data$ApexFound, "orange", col)
-
-          map =  map |> leaflet::addLegend(
-            position = "bottomright",
-            colors = c("green", "orange", "red"),
-            labels = c("Tree apex found", "Tree apex not found", "No tree"),
-            title = "Tree status")
-
-        } else {
-          col = "#03F"  # fallback if no TreeFound column
-        }
-
-        map = map |> leaflet::addCircleMarkers(data = data, color = col, group = "Tree layout", radius = 1, layerId = 1:nrow(data))
-        overlayGroups = c(overlayGroups, "Tree layout")
-      }
-
-      if (!is.null(self$trees) & trees)
-      {
-        data = sf::st_transform(self$trees, 4326)
-        data = remove_virtual_trees(data)
-
-        pal <- leaflet::colorNumeric(palette = viridis::viridis(8), domain = data$Height)
-
-        map = map |> leaflet::addCircleMarkers(
-          data = data,
-          group = "Trees",
-          radius = 4,
-          color = ~pal(Height),
-          fillOpacity = 0.9,
-          stroke = FALSE,
-          popup = leafpop::popupTable(data, feature.id = FALSE, row.numbers = FALSE))
-        overlayGroups = c(overlayGroups, "Trees")
-
-        map |> leaflet::addLegend(
-          pal     = pal,
-          values  = data$Height,
-          title   = "Tree Height (m)",
-          opacity = 1
-        )
-      }
-
-      if (length(overlayGroups) > 0)
-      {
-        map = map |> leaflet::addLayersControl(
-          overlayGroups = overlayGroups,
-          options = leaflet::layersControlOptions(collapsed = FALSE)
-        )
-      }
-      else
-      {
-        map = map |> leaflet::setView(lng = 174.8, lat = -41.0, zoom = 3)
-      }
-
-      if (!is.null(edit))
-      {
-        map = map |> leaflet.extras::addDrawToolbar(
-          targetGroup = edit,
-          polylineOptions   = FALSE,
-          polygonOptions    = FALSE,
-          circleOptions     = FALSE,
-          rectangleOptions  = FALSE,
-          markerOptions     = FALSE,
-          editOptions = leaflet.extras::editToolbarOptions()
-        )
-      }
-
-      map
-    },
-
     show_all = function(...)
     {
       self$leaflet(...)
     },
 
+    leaflet = function(proxy = NULL, mapId = "", edit = NULL,
+                        dtm = TRUE, chm = TRUE, schm = TRUE, bound = TRUE,
+                        bbox = TRUE, trees = TRUE, crowns = TRUE, layout = TRUE)
+    {
+      use_proxy <- !is.null(proxy)
+
+      if (!use_proxy) {
+        map <- make_base_map()
+      } else {
+        map <- leaflet::leafletProxy(mapId, session = proxy)
+      }
+
+      overlayGroups <- character()
+
+      if (dtm) {
+        res <- add_dtm_layer(map, self$dtm, proxy = use_proxy)
+        map <- res$map
+        if (!is.null(res$groups)) overlayGroups <- c(overlayGroups, res$groups)
+      }
+
+      if (schm) {
+        res <- add_schm_layer(map, self$schm, proxy = use_proxy)
+        map <- res$map
+        if (!is.null(res$groups)) overlayGroups <- c(overlayGroups, res$groups)
+      }
+
+      if (chm) {
+        res <- add_chm_layer(map, self$chm, proxy = use_proxy)
+        map <- res$map
+        if (!is.null(res$groups)) overlayGroups <- c(overlayGroups, res$groups)
+      }
+
+      if (bbox) {
+        res <- add_bbox_layer(map, self$bbox, proxy = use_proxy)
+        map <- res$map
+        if (!is.null(res$groups)) overlayGroups <- c(overlayGroups, res$groups)
+      }
+
+      if (bound) {
+        res <- add_boundaries_layer(map, self$boundaries, proxy = use_proxy)
+        map <- res$map
+        if (!is.null(res$groups)) overlayGroups <- c(overlayGroups, res$groups)
+      }
+
+      if (layout) {
+        res <- add_block_layout_layer(map, self$layout, proxy = use_proxy)
+        map <- res$map
+        if (!is.null(res$groups)) overlayGroups <- c(overlayGroups, res$groups)
+
+        res <- add_warnings_layer(map, self$layout_warnings, proxy = use_proxy)
+        map <- res$map
+        if (!is.null(res$groups)) overlayGroups <- c(overlayGroups, res$groups)
+
+        res <- add_tree_layout_layer(map, self$layout, proxy = use_proxy)
+        map <- res$map
+        if (!is.null(res$groups)) overlayGroups <- c(overlayGroups, res$groups)
+      }
+
+      if (crowns) {
+        res <- add_crowns_layer(map, self$crowns, proxy = use_proxy)
+        map <- res$map
+        if (!is.null(res$groups)) overlayGroups <- c(overlayGroups, res$groups)
+      }
+
+      if (trees) {
+        res <- add_trees_layer(map, self$trees, proxy = use_proxy)
+        map <- res$map
+        if (!is.null(res$groups)) overlayGroups <- c(overlayGroups, res$groups)
+      }
+
+      # Add draw toolbar only for initial render
+      if (!is.null(edit) && !use_proxy) {
+        map <- map |> leaflet.extras::addDrawToolbar(
+          targetGroup = edit,
+          polylineOptions = FALSE, polygonOptions = FALSE,
+          circleOptions = FALSE, rectangleOptions = FALSE,
+          markerOptions = FALSE,
+          editOptions = leaflet.extras::editToolbarOptions()
+        )
+      }
+
+      # Layers control vs. default view: only on initial render (avoid duplicate controls on proxy updates)
+      if (!use_proxy) {
+        if (length(overlayGroups) > 0) {
+          map <- map |> leaflet::addLayersControl(
+            overlayGroups = overlayGroups,
+            options = leaflet::layersControlOptions(collapsed = FALSE)
+          )
+        } else {
+          map <- map |> leaflet::setView(lng = 174.8, lat = -41.0, zoom = 3)
+        }
+      }
+
+      if (!use_proxy) {
+        map = center_on_object(map, self$bbox)
+      }
+
+      map
+    },
+
     show_trees = function(...)
     {
-      self$leaflet(dtm = FALSE, layout = FALSE, trees = TRUE, ...)
+      self$leaflet(dtm = FALSE, chm = TRUE, schm = TRUE, bound = TRUE,
+                   bbox = FALSE, trees = TRUE, crowns = TRUE, layout = FALSE, ...)
     },
 
     show_chm = function(...)
     {
-      self$leaflet(dtm = FALSE, layout = FALSE, trees = FALSE, ...)
+      self$leaflet(dtm = TRUE, chm = TRUE, schm = TRUE, bound = TRUE,
+                   bbox = FALSE, trees = FALSE, crowns = FALSE, layout = FALSE, ...)
     },
 
     show_layout = function(...)
     {
-      self$leaflet(dtm = FALSE, layout = TRUE, trees = FALSE, ...)
+      self$leaflet(dtm = FALSE, chm = TRUE, schm = TRUE, bound = TRUE,
+                   bbox = FALSE, trees = FALSE, crowns = FALSE, layout = TRUE, ...)
     },
 
     plot = function(useNULL = FALSE)
@@ -1166,14 +1137,28 @@ Plantation <- R6::R6Class("Plantation",
       {
         las = self$las
 
+        ndisplay = 100000
+
+        # Ground points
         gnd = lidR::filter_ground(las)
+        n = lidR::npoints(gnd)
+        if (n > ndisplay)
+        {
+          i = sample(1:n, ndisplay)
+          i = sort(i)
+          gnd = gnd[i]
+        }
+
+        # Non Ground points
         ngnd = lidR::filter_poi(las, Classification != lidR::LASGROUND)
         n = lidR::npoints(ngnd)
-        if (n > 100000)
+        if (n > ndisplay)
         {
-          r = ceiling(n/100000)
-          ngnd <- ngnd[seq(1, n, by = r)]
+          i = sample(1:n, ndisplay)
+          i = sort(i)
+          ngnd = ngnd[i]
         }
+
         pal = lidR::height.colors(25)
         col = lidR:::set.colors(ngnd$Z, pal)
         rgl::points3d(gnd$X-offset[1], gnd$Y-offset[2], gnd$Z-offset[3], col = "blue", size = 2, tag = "ground")
@@ -1203,6 +1188,8 @@ Plantation <- R6::R6Class("Plantation",
       self$wd <- dirname(file)
       self$fconfig <- file
       self$write_config()
+      if (!dir.exists(paste0(self$wd, "/output")))
+        dir.create(paste0(self$wd, "/output"))
     },
 
     read_config = function(file)
@@ -1219,6 +1206,9 @@ Plantation <- R6::R6Class("Plantation",
       if (is.null(config$format)) stop("Invalid RPBC file format")
       if (config$format$signature != "RPBC") stop("Invalid RPBC file signature")
       if (config$format$version != "1.0") stop("Invalid RPBC file version")
+
+      if (!is.null(config$crs))
+        self$set_crs(config$crs$wkt, nowrite = TRUE)
 
       # First we read the point cloud
       if (!is.null(config$point_cloud))
@@ -1282,11 +1272,12 @@ Plantation <- R6::R6Class("Plantation",
               nowrite = TRUE)
           }
 
-          if (!is.null(config$layout$origin))
-            self$layout$set_origin(config$layout$origin[[1]], config$layout$origin[[2]])
-
-          if (!is.null(config$layout$angle))
-            self$layout$set_angle(config$layout$angle)
+          if (!is.null(config$layout$matrix))
+          {
+            M = unlist(config$layout$matrix)
+            M = matrix(M, ncol = 3, byrow = TRUE)
+            self$layout$set_matrix(M)
+          }
         }
       }
 
@@ -1309,8 +1300,8 @@ Plantation <- R6::R6Class("Plantation",
         )
       }
 
-      if (!is.null(config$crs))
-        self$set_crs(config$crs$wkt, nowrite = TRUE)
+      if (!is.null(self$crs))
+        self$set_crs(self$crs)
     },
 
     write_config = function()
@@ -1361,13 +1352,17 @@ Plantation <- R6::R6Class("Plantation",
       # The layout is the theoretic position of the trees. It can be either an Excel file with block
       # layout from which we build the trees positions on-the-fly using block size, tree count and so on.
       # It can also be a geospatial file with the tree positions
+      M_list = NULL
+      if (!is.null(self$layout))
+        M_list <- split(self$layout$M, row(self$layout$M))
+
       config$layout = list(
         file = self$flayout,
         block_size = self$layout$block_size,
         num_trees = self$layout$num_trees,
         start = self$layout$start,
         orientation = self$layout$orientation,
-        angle = self$layout$angle,
+        matrix = M_list,
         origin = self$layout$origin
       )
 
@@ -1405,7 +1400,7 @@ Plantation <- R6::R6Class("Plantation",
 
       config = rmNullObs(config)
 
-      jsonlite::write_json(config, self$fconfig, pretty = TRUE, auto_unbox = TRUE)
+      jsonlite::write_json(config, self$fconfig, pretty = TRUE, auto_unbox = TRUE, digits = 8)
     },
 
     state = function()
@@ -1421,3 +1416,24 @@ Plantation <- R6::R6Class("Plantation",
     }
   )
 )
+
+validate_coordinates <- function(long, lat, east, north)
+{
+  # Geographic coordinates have precedence
+  if (!is.null(long) || !is.null(lat)) {
+    if (!is.null(long) && !is.null(lat)) {
+      return("lonlat")
+    } else {
+      return("invalid")
+    }
+  }
+
+  if (!is.null(east) || !is.null(north)) {
+    if (!is.null(east) && !is.null(north)) {
+      return("projected")
+    } else {
+      return("invalid")
+    }
+  }
+  return("invalid")
+}

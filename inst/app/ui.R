@@ -37,6 +37,16 @@ ui <- page_navbar(
   theme = bs_theme(version = 5, , bootswatch = "flatly"),
   navbar_options = navbar_options(bg = "#0062cc", underline = TRUE),
 
+  tags$script(HTML("
+    document.addEventListener('keydown', function(e) {
+      // Example: Ctrl+K
+      if (e.ctrlKey && e.key === 'k') {
+        e.preventDefault(); // Prevent default browser action
+        Shiny.setInputValue('reload', new Date().getTime());
+      }
+    });
+  ")),
+
   # ---- nav 1 project ----
   nav_panel(
     title = "1. Project",

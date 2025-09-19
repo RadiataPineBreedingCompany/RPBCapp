@@ -1,9 +1,14 @@
 extract_with_buffer = function(raster, points, buffer)
 {
   names(raster) = "Z"
+  xy = sf::st_coordinates(points)
   discs = sf::st_as_sf(sf::st_buffer(points, buffer))
   ans = terra::extract(raster, discs, xy = TRUE)
   ans = data.table::as.data.table(ans)
+  nas = which(is.na(ans$Z))
+  ans$Z[nas] = 0
+  ans$x[nas] = xy[ans$ID[nas],1]
+  ans$y[nas] = xy[ans$ID[nas],2]
   ans
 }
 
@@ -30,6 +35,7 @@ relocate_trees = function(chm, echm, plan, spacing, hmin, progress = NULL)
     prog$tick(i)
 
     ans = extract_with_buffer(echm, tmp, search_radius)
+    ans$Z[is.na(ans$Z)] =0
     j = ans[, .I[which.max(Z)], by = ID]$V1
     tmp = ans[j]
 
@@ -176,9 +182,6 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
 
   pos = sf::st_geometry(trees)
 
-  nofound = trees$ApexFound == FALSE
-  virtual_trees = trees[[BLOCKNAME]] < 0
-
   # Handle extra trees required to buffer the segmentation
   id = 1:nrow(trees)
   seeds = sf::st_as_sf(data.frame(TREEID = id, geometry = pos))
@@ -198,6 +201,10 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
 
 
   prog$tick(2, "Individual tree measurement")
+
+  trees = trees[pcrown$TREEID,]
+  virtual_trees = trees[[BLOCKNAME]] < 0
+  nofound = trees$ApexFound == FALSE
 
   pcrown$ApexFound = trees$ApexFound
   #pcrown = cbind(mesurage[!cut,], pcrown)

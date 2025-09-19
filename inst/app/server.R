@@ -20,6 +20,57 @@ popup_error = function(msg)
   )
 }
 
+popup_warning = function(msg)
+{
+  showModal(
+    modalDialog(
+      div(
+        style = "display: flex; align-items: center;",
+        span(icon("exclamation-circle"), style = "color: #8a6d3b; font-size: 24px; margin-right: 10px;"),
+        span("Warning", style = "color: #8a6d3b; font-weight: bold; font-size: 20px;")
+      ),
+      tags$div(msg, style = "margin-top: 10px; color: #333;"),
+      easyClose = TRUE,
+      footer = modalButton("Dismiss"),
+      size = "m"
+    )
+  )
+}
+
+safe_run <- function(expr, catch_warnings = FALSE)
+{
+  if (catch_warnings)
+  {
+    tryCatch(
+      withCallingHandlers(
+        expr,
+        warning = function(w) {
+          popup_warning(conditionMessage(w))
+          invokeRestart("muffleWarning")  # continue after warning
+        }
+      ),
+      error = function(e) {
+        popup_error(conditionMessage(e))
+        NULL
+      }
+    )
+  } else {
+    tryCatch(
+      expr,
+      error = function(e) {
+        popup_error(conditionMessage(e))
+        NULL
+      }
+    )
+  }
+}
+
+show_notification = function(msg)
+{
+  cat(msg, "\n")
+  showNotification(msg)
+}
+
 short_path <- function(paths, max_chars = 40) {
   sapply(paths, function(p) {
     if (is.na(p)) return(NA)
@@ -124,19 +175,14 @@ server <- function(input, output, session)
   shinyFiles::shinyFileSave(input, "createProjectButton", roots = volumes)
 
   # ===== Init Map ====
-  output$mapTreeLayout <- leaflet::renderLeaflet({
-    leaflet::leaflet() %>%
-      leaflet::addTiles() %>%
-      leaflet::setView(lng = 174.8, lat = -41.0, zoom = 5)
-  })
 
-  output$mapPreview <- leaflet::renderLeaflet({
-    leaflet::leaflet() %>%
-      leaflet::addTiles() %>%
-      leaflet::setView(lng = 174.8, lat = -41.0, zoom = 5)
-  })
+  output$mapTreeLayout <- leaflet::renderLeaflet({ make_base_map() })
+  output$mapPreview    <- leaflet::renderLeaflet({ make_base_map() })
+  output$mapCHM        <- leaflet::renderLeaflet({ make_base_map() })
+  output$mapTree       <- leaflet::renderLeaflet({ make_base_map() })
 
-  # ===== OnClick createProjectButton ====
+  # ===== OnClick Create Project Button ====
+
   observeEvent(input$createProjectButton, {
 
     file <- shinyFiles::parseSavePath(volumes, input$createProjectButton)$datapath
@@ -144,268 +190,264 @@ server <- function(input, output, session)
 
     if (!is.null(file) && length(file) > 0)
     {
-      showNotification("Creation of a project")
+      show_notification("Creation of a project")
 
-      tryCatch({
+      safe_run({
+        plantation <<- Plantation$new()
         plantation$create_config(file)
-      },
-      error = function(e)
-      {
-        popup_error(conditionMessage(e))
       })
+
       update_file_table(runif(1))
       update_state_table(runif(1))
     }
 
   }, ignoreInit = TRUE)
 
-  # ===== OnClick loadConfigFileButton ====
+  # ===== OnClick Load Config File Button ====
+
   observeEvent(input$loadConfigFileButton, {
 
     file <- shinyFiles::parseFilePaths(volumes, input$loadConfigFileButton)$datapath
 
-    if (!is.null(file) && length(file) > 0)
+    if (is.null(file) || (length(file) == 0))
+      return(NULL)
+
+    show_notification("Loading project")
+
+    safe_run({
+      plantation <<- Plantation$new()
+      plantation$read_config(file)
+    }, catch_warnings = TRUE)
+
+    cat("Update UI sliders\n")
+
+    if (!is.null(plantation$layout))
     {
-      showNotification("Loading project")
+      x_size = plantation$layout$block_size[1]
+      y_size = x_size
+      if (length(plantation$layout$block_size) == 2)
+        y_size = plantation$layout$block_size[2]
 
-      tryCatch({
-        plantation$read_config(file)
-
-        if (!is.null(plantation$layout))
-        {
-          x_size = plantation$layout$block_size[1]
-          y_size = x_size
-          if (length(plantation$layout$block_size) == 2)
-            y_size = plantation$layout$block_size[2]
-
-          updateNumericInput(session, "blockSizeInputX",  value = x_size)
-          updateNumericInput(session, "blockSizeInputY",  value = y_size)
-          updateNumericInput(session, "treeNumberInput", value = plantation$layout$num_trees)
-          updateRadioButtons(session, "partternStartChoiceRadioButton", selected = plantation$layout$start)
-          updateRadioButtons(session, "partternOrientationChoiceRadioButton", selected = plantation$layout$orientation)
-        }
-
-        updateSliderInput(session, "smoothCHM", value = plantation$params$smoothCHM)
-        updateSliderInput(session, "smoothPasses", value = plantation$params$smoothPasses)
-        updateSliderInput(session, "hminAdjustTreesSlider", value = plantation$params$treesHmin)
-        updateSliderInput(session, "hminMeasureTreesSlider", value = plantation$params$crownsHmin)
-        updateSliderInput(session, "keepRandomFraction", value = plantation$params$keepRandomFraction)
-        updateSliderInput(session, "rigidness", value = plantation$params$rigidness)
-        updateSliderInput(session, "cloth_resolution", value = plantation$params$cloth_resolution)
-        updateSliderInput(session, "res", value = plantation$params$resCHM)
-
-        if (!is.null(plantation$flas))
-        {
-          header = lidR::readLASheader(plantation$flas)
-          d = round(lidR::density(header),1)
-          f = round((200/d)/0.05)*0.05
-          if (f > 1) f = 1
-          output$estimatedDensityValue = renderText(d)
-          output$recommandedFractionValue = renderText(f)
-        }
-
-        update_file_table(runif(1))
-        update_state_table(runif(1))
-        update_layout_map(runif(1))
-        update_tree_map(runif(1))
-        update_chm_map(runif(1))
-        update_rgl_view(runif(1))
-        update_preview_map(runif(1))
-        update_stats_ui(runif(1))
-        update_ggplots(runif(1))
-      },
-      error = function(e)
-      {
-        popup_error(conditionMessage(e))
-      })
+      updateNumericInput(session, "blockSizeInputX",  value = x_size)
+      updateNumericInput(session, "blockSizeInputY",  value = y_size)
+      updateNumericInput(session, "treeNumberInput", value = plantation$layout$num_trees)
+      updateRadioButtons(session, "partternStartChoiceRadioButton", selected = plantation$layout$start)
+      updateRadioButtons(session, "partternOrientationChoiceRadioButton", selected = plantation$layout$orientation)
     }
+
+    updateSliderInput(session, "smoothCHM", value = plantation$params$smoothCHM)
+    updateSliderInput(session, "smoothPasses", value = plantation$params$smoothPasses)
+    updateSliderInput(session, "hminAdjustTreesSlider", value = plantation$params$treesHmin)
+    updateSliderInput(session, "hminMeasureTreesSlider", value = plantation$params$crownsHmin)
+    updateSliderInput(session, "keepRandomFraction", value = plantation$params$keepRandomFraction)
+    updateSliderInput(session, "rigidness", value = plantation$params$rigidness)
+    updateSliderInput(session, "cloth_resolution", value = plantation$params$cloth_resolution)
+    updateSliderInput(session, "res", value = plantation$params$resCHM)
+
+    cat("Estimate density\n")
+
+    if (!is.null(plantation$flas))
+    {
+      header = lidR::readLASheader(plantation$flas)
+      d = round(lidR::density(header),1)
+      f = round((200/d)/0.05)*0.05
+      if (f > 1) f = 1
+      output$estimatedDensityValue = renderText(d)
+      output$recommandedFractionValue = renderText(f)
+      if (is.null(plantation$params$keepRandomFraction))
+        plantation$params$keepRandomFraction = f
+    }
+
+    cat("Trigger UI update\n")
+
+    update_file_table(runif(1))
+    update_state_table(runif(1))
+    update_layout_map(runif(1))
+    update_tree_map(runif(1))
+    update_chm_map(runif(1))
+    update_rgl_view(runif(1))
+    update_preview_map(runif(1))
+    update_stats_ui(runif(1))
+    update_ggplots(runif(1))
+
+    cat("Project loaded\n")
+
   }, ignoreInit = TRUE)
 
-  # ===== OnClick loadLasFileButton ====
+  # ===== OnClick Load LAS File Button ====
   observeEvent(input$loadLasFileButton, {
+
     path <- shinyFiles::parseFilePaths(volumes, input$loadLasFileButton)$datapath
-    if (!is.null(path) && length(path) > 0)
-    {
-      tryCatch({
-        plantation$set_cloud(path)
 
-        # We set the point cloud. This should have set the CRS except if the LAS file has no CRS
-        if (plantation$crs == sf::NA_crs_ | is.null(plantation$crs))
-            showModal(selectCRSModalDialog())
+    if (is.null(path) || length(path) == 0)
+      return(NULL)
 
-        if (!is.null(plantation$flas))
-        {
-          header = lidR::readLASheader(plantation$flas)
-          d = round(lidR::density(header),1)
-          f = round((200/d)/0.05)*0.05
-          if (f > 1) f = 1
-          output$estimatedDensityValue = renderText(d)
-          output$recommandedFractionValue = renderText(f)
-          updateSliderInput(session, "keepRandomFraction", value = f)
-        }
+    safe_run({
+      plantation$set_cloud(path)
 
-        update_preview_map(runif(1))
-        update_file_table(runif(1))
-      },
-      error = function(e)
+      # We set the point cloud.
+      # This should have set the CRS except if the LAS file has no CRS
+      if (plantation$crs == sf::NA_crs_ | is.null(plantation$crs))
       {
-        popup_error(conditionMessage(e))
-      })
-    }
+        showModal(selectCRSModalDialog())
+      }
+
+      if (!is.null(plantation$flas))
+      {
+        header = lidR::readLASheader(plantation$flas)
+        d = round(lidR::density(header),1)
+        f = round((200/d)/0.05)*0.05
+        if (f > 1) f = 1
+        output$estimatedDensityValue = renderText(d)
+        output$recommandedFractionValue = renderText(f)
+        updateSliderInput(session, "keepRandomFraction", value = f)
+      }
+
+      update_preview_map(runif(1))
+      update_state_table(runif(1))
+      update_file_table(runif(1))
+    })
   }, ignoreInit = TRUE)
 
-  # ===== OnClick loadBlockPatternFileButton ====
+  # ===== OnClick Load Block Pattern File Button ====
+
   observeEvent(input$loadBlockPatternFileButton, {
+
     file <- shinyFiles::parseFilePaths(volumes, input$loadBlockPatternFileButton)$datapath
 
-    if (!is.null(file) && length(file) > 0)
-    {
-      showNotification("Loading Excel database")
+    if (is.null(file) || length(file) == 0)
+      return(NULL)
 
-      tryCatch({
-        plantation$set_database(file)
-        plantation$set_layout_parameter(
-          c(input$blockSizeInputX, input$blockSizeInputY),
-          input$treeNumberInput,
-          input$partternStartChoiceRadioButton,
-          input$partternOrientationChoiceRadioButton)
-        update_file_table(runif(1))
-        update_layout_plot(runif(1))
-        update_preview_map(runif(1))
-      },
-      error = function(e)
-      {
-        popup_error(conditionMessage(e))
-      })
-    }
+    show_notification("Loading Excel database")
+
+    safe_run({
+      plantation$set_database(file)
+      plantation$set_layout_parameter(
+        c(input$blockSizeInputX, input$blockSizeInputY),
+        input$treeNumberInput,
+        input$partternStartChoiceRadioButton,
+        input$partternOrientationChoiceRadioButton)
+
+      update_file_table(runif(1))
+      update_state_table(runif(1))
+      update_layout_plot(runif(1))
+      update_preview_map(runif(1))
+    }, catch_warnings = TRUE)
   }, ignoreInit = TRUE)
 
-  # ===== OnClick loadBoundaryFileButton ====
+  # ===== OnClick Load Boundary File Button ====
   observeEvent(input$loadBoundaryFileButton, {
 
     file <- shinyFiles::parseFilePaths(volumes, input$loadBoundaryFileButton)$datapath
 
-    if (!is.null(file) && length(file) > 0)
-    {
-      showNotification("Loading boundaries polygon")
+    if (is.null(file) || length(file) == 0)
+      return(NULL)
 
-      tryCatch({
+    show_notification("Loading boundaries polygon")
 
-        plantation$set_boundaries(file)
-        update_preview_map(runif(1))
-        update_file_table(runif(1))
-        update_state_table(runif(1))
-      },
-      error = function(e)
-      {
-        popup_error(conditionMessage(e))
-      })
-    }
+    safe_run({
+      plantation$set_boundaries(file)
+      update_preview_map(runif(1))
+      update_file_table(runif(1))
+      update_state_table(runif(1))
+    })
   })
 
-  # ===== OnClick loadCHMFileButton ====
+  # ===== OnClick Load CHM File Button ====
+
   observeEvent(input$loadCHMFileButton, {
 
     file <- shinyFiles::parseFilePaths(volumes, input$loadCHMFileButton)$datapath
 
-    tryCatch({
-      showNotification("Loading CHM")
+    show_notification("Loading CHM")
+
+    safe_run({
       plantation$set_chm(file)
       update_preview_map(runif(1))
       update_chm_map(runif(1))
       update_file_table(runif(1))
       update_state_table(runif(1))
-    },
-    error = function(e)
-    {
-      popup_error(conditionMessage(e))
     })
   })
 
-  # ===== OnClick loadTreeMapFileButton ====
+  # ===== OnClick Load Tree Map File Button ====
+
   observeEvent(input$loadTreeMapFileButton, {
 
     file <- shinyFiles::parseFilePaths(volumes, input$loadTreeMapFileButton)$datapath
 
-    tryCatch({
-      showNotification("Loading tree plantation design")
+    show_notification("Loading tree plantation design")
+
+    safe_run({
       plantation$set_layout(file)
       update_file_table(runif(1))
       update_state_table(runif(1))
       update_tree_map(runif(1))
       update_layout_map(runif(1))
       update_preview_map(runif(1))
-    },
-    error = function(e)
-    {
-      popup_error(conditionMessage(e))
     })
   })
 
+  # ===== OnClick smooth CHM Button ====
 
-  # ===== OnClick smoothCHMButton ====
   observeEvent(input$smoothCHMButton, {
 
-    tryCatch({
-      showNotification("Smoothing CHM")
+    safe_run({
+      show_notification("Smoothing CHM")
       plantation$smooth_chm(input$smoothCHM, input$smoothPasses)
       update_chm_map(runif(1))
       update_file_table(runif(1))
-      update_state_table(runif(1))
-    },
-    error = function(e)
-    {
-      popup_error(conditionMessage(e))
     })
   })
 
-  # ===== OnClick alignLayoutButton ====
+  # ===== OnClick Align Layout Button ====
+
   observeEvent(input$alignLayoutButton, {
 
-    showNotification("Aligning tree layout")
+    show_notification("Aligning tree layout")
 
-    tryCatch({
-      plantation$align_layout()
+    safe_run({
+      withProgress(message = 'Tree detection', value = 0, {
+        plantation$align_layout(incProgress)
+      })
       update_layout_map(runif(1))
       update_state_table(runif(1))
-      saveProject(runif(1))
-    },
-    error = function(e)
-    {
-      popup_error(conditionMessage(e))
     })
   }, ignoreInit = TRUE)
 
-  # ===== OnClick adjustLayoutButton ====
+  # ===== OnClick Adjust Layout Button ====
+
   observeEvent(input$adjustLayoutButton, {
-    print("Tree detection")
 
     hmin = isolate(input$hminAdjustTreesSlider)
 
-    if (is.null(hmin))
-    {
+    if (is.null(hmin)) {
       popup_error("Internal error: hmin = NULL")
-      return()
+      return(NULL)
     }
 
-    tryCatch({
+    safe_run({
       withProgress(message = 'Tree detection', value = 0, {
         plantation$adjust_layout(hmin, progress = incProgress)
       })
       update_layout_map(runif(1))
-    },
-    error = function(e)
-    {
-      popup_error(conditionMessage(e))
     })
   }, ignoreInit = TRUE)
 
-  # ===== OnClick runMeasurementButton ====
+  # ===== OnClick Run Measurement Button ====
+
   observeEvent(input$runMeasurementButton, {
+
     hmin = isolate(input$hminMeasureTreesSlider)
 
-    tryCatch({
+    if (is.null(hmin)) {
+      popup_error("Internal error: hmin = NULL")
+      return(NULL)
+    }
 
+    show_notification("Measuring trees")
+
+    safe_run({
       if (!plantation$is_adjusted())
         stop("Tree location not found yet. Please run tree localisation first (tab 4)")
 
@@ -418,58 +460,47 @@ server <- function(input, output, session)
       update_state_table(runif(1))
       update_stats_ui(runif(1))
       update_ggplots(runif(1))
-    },
-    error = function(e)
-    {
-      popup_error(conditionMessage(e))
     })
   }, ignoreInit = TRUE)
 
   # ===== On Edited Feature ======
+
   observeEvent(input$mapTreeLayout_draw_edited_features, {
-    showNotification("SVD alignment")
+
+    if (is.null(edits))
+      return(NULL)
+
+    show_notification("SVD alignment")
+
     edits <- input$mapTreeLayout_draw_edited_features
-    if (!is.null(edits))
-    {
-      tryCatch({
-        geojson <- jsonlite::toJSON(edits, auto_unbox = TRUE)
-        print(geojson)
-        edited <- geojsonsf::geojson_sf(geojson)
-        edited <- sf::st_transform(edited, plantation$crs)
 
-        local = RPBCapp:::remove_virtual_trees(plantation$layout$tree_layout_raw)
-        local = local[edited$layerId,]
+    safe_run({
+      geojson <- jsonlite::toJSON(edits, auto_unbox = TRUE, digits = 8)
+      edited  <- geojsonsf::geojson_sf(geojson)
+      edited  <- sf::st_transform(edited, plantation$crs)
 
-        Mlocal = sf::st_coordinates(local)
-        Mglobal = sf::st_coordinates(edited)
+      local <- RPBCapp:::remove_virtual_trees(plantation$layout$tree_layout_raw)
+      local <- local[edited$layerId,]
 
-        #print(dput(Mlocal))
-        #print(dput(Mglobal))
-        M = layout_alignment_svd(Mlocal, Mglobal)
-        #print(dput(M))
-        plantation$layout$set_matrix(M)
+      Mlocal  <- sf::st_coordinates(local)
+      Mglobal <- sf::st_coordinates(edited)
 
-        output$mapTreeLayout <- leaflet::renderLeaflet({
-          showNotification("Updating layout map")
-          plantation$show_layout(edit = "Tree layout")
-        })
-      },
-      error = function(e)
-      {
-        popup_error(conditionMessage(e))
-        update_layout_map(runif(1))
-      })
-    }
+      M <- layout_alignment_svd(Mlocal, Mglobal)
+      plantation$layout$set_matrix(M)
+
+      update_layout_map(runif(1))
+    })
   })
 
-  # ===== OnClick processPointCloudButton ====
+  # ===== OnClick Process PointCloud Button ====
+
   observeEvent(input$processPointCloudButton, {
-    tryCatch({
+
+    safe_run({
       withProgress(message = 'Processing', value = 0, {
 
-        if (is.null(plantation)) {
+        if (is.null(plantation))
           stop("Uninitialized plantation.")
-        }
 
         plantation$process_pointcloud(
           input$keepRandomFraction,
@@ -482,9 +513,6 @@ server <- function(input, output, session)
         update_preview_map(runif(1))
         update_rgl_view(runif(1))
       })
-    },
-    error = function(e) {
-      popup_error(conditionMessage(e))
     })
 
     update_chm_map(runif(1))
@@ -492,8 +520,10 @@ server <- function(input, output, session)
     update_file_table(runif(1))
   })
 
-  # ===== OnChange partternChoiceRadioButton ====
+  # ===== OnChange Parttern Choice Radio Button ====
+
   output$selectedPatternImage <- renderPlot({
+
     coords = generate_snake_coords(
       input$treeNumberInput, 0, 0, 1, 1,
       input$partternOrientationChoiceRadioButton,
@@ -515,6 +545,7 @@ server <- function(input, output, session)
   })
 
   # ===== OnChange any tree pattern inputs ====
+
   observeEvent(
     list(input$blockSizeInputX,
          input$blockSizeInputY,
@@ -522,7 +553,8 @@ server <- function(input, output, session)
          input$partternStartChoiceRadioButton,
          input$partternOrientationChoiceRadioButton),
     {
-      validate(need(!is.null(plantation$layout$tree_layout_raw), "No block layout file selected yet"))
+
+      if (is.null(plantation$layout$tree_layout_raw)) return(NULL)
 
       plantation$set_layout_parameter(
         c(input$blockSizeInputX,input$blockSizeInputY),
@@ -535,27 +567,31 @@ server <- function(input, output, session)
     ignoreInit = TRUE
   )
 
+  # ===== OnClick CRS Modal Windows Ok ====
+
+  observeEvent(input$confirm_crs, {
+    req(input$choose_crs)
+    plantation$set_crs(sf::st_crs(input$choose_crs))
+    removeModal()
+    update_preview_map(runif(1))
+  })
+
   # ===== OnEvent save ====
+
   observe({
     val <- saveProject()
-    if (val != 0)
-    {
-      tryCatch({
-        plantation$write_config()
-      },
-      error = function(e) {
-        popup_error(conditionMessage(e))
-      })
-    }
+    if (val == 0) return(NULL)
+    safe({ plantation$write_config() })
   })
 
   # ===== OnEvent ggplot ====
+
   observe({
     update_ggplots()
 
-    print("Update ggplots")
+    show_notification("Update ggplots")
 
-    tryCatch({
+    safe_run({
       gglist = plantation$get_ggstats()
 
       for (i in 1:6)
@@ -572,79 +608,75 @@ server <- function(input, output, session)
           })
         })
       }
-    },
-    error = function(e) {
-      popup_error(conditionMessage(e))
     })
   })
 
-  observeEvent(input$confirm_crs, {
-    req(input$choose_crs)
-    plantation$set_crs(sf::st_crs(input$choose_crs))
-    removeModal()
+  # ==== OnEvent Reload ====
+
+  observeEvent(input$reload, {
+    show_notification("Refreshing app")
+    cat("Refreshing app\n")
+    update_file_table(runif(1))
+    update_state_table(runif(1))
+    update_layout_map(runif(1))
+    update_tree_map(runif(1))
+    update_chm_map(runif(1))
+    update_rgl_view(runif(1))
     update_preview_map(runif(1))
+    update_stats_ui(runif(1))
+    update_ggplots(runif(1))
   })
 
 
   # ===== OnClick tree Zero =====
+
   output$clickTreeZeroInfo <- renderUI({
+    cat("Tree zero clicked\n")
 
     click <- input$mapTreeLayout_click
     if (is.null(click)) return("Click on the map")
 
-    # Convert to NZTM coordinates
     p <- sf::st_sfc(sf::st_point(c(click$lng, click$lat)), crs = 4326)
-    p <- sf::st_transform(p, 2193)
+    p <- sf::st_transform(p, plantation$crs)
     coords <- as.numeric(sf::st_coordinates(p))
 
-    #print(paste0("Click = c(", paste0(coords, collapse = ", "), ")"))
-
-    # Get plantation if needed
     if (is.null(plantation$layout))
     {
-      popup_error("Clicked but no block layout was loaded")
-      return()
-    }
-    else
-    {
-      plantation$layout$set_origin(coords[1], coords[2])
+      popup_error("Clicked but no block layout was loaded yet")
+      return(NULL)
     }
 
-    # Create nice HTML output
-    HTML(sprintf(
-      "<b>Clicked Coordinates:</b><br/>
-     Latitude: %.6f<br/>
-     Longitude: %.6f<br/>
-     NZTM X: %.2f<br/>
-     NZTM Y: %.2f",
-      click$lat, click$lng, coords[1], coords[2]
-    ))
+    plantation$layout$set_origin(coords[1], coords[2])
+
+    HTML(sprintf("X: %.2f<br/>Y: %.2f", coords[1], coords[2]))
   })
 
   # ===== update maps ====
+
   output$mapTreeLayout <- leaflet::renderLeaflet({
-    showNotification("Updating layout map")
+    show_notification("Updating layout map")
     update_layout_map()
     plantation$show_layout(edit = "Tree layout")
   })
 
   output$mapTrees <- leaflet::renderLeaflet({
-    showNotification("Updating tree map")
+    show_notification("Updating tree map")
     update_tree_map()
     plantation$show_trees()
   })
 
   output$mapCHM <- leaflet::renderLeaflet({
-    showNotification("Updating CHM map")
+    show_notification("Updating CHM map")
     update_chm_map()
     plantation$show_chm()
   })
 
 
   output$mapPreview <- leaflet::renderLeaflet({
-    showNotification("Updating preview map")
+    show_notification("Updating preview map")
     update_preview_map()
-    plantation$leaflet(trees = FALSE, schm = FALSE)
+    plantation$leaflet(dtm = FALSE, chm = TRUE, schm = TRUE, bound = TRUE,
+                       bbox = TRUE, trees = FALSE, crowns = FALSE, layout = TRUE)
   })
 
   # ===== update table ====
@@ -652,8 +684,15 @@ server <- function(input, output, session)
     update_file_table()
     files_df = plantation$get_file_table()
     files_df$Path = short_path(files_df$Path, 50)
-    na.omit(files_df)
-  }, options = list(dom = 't', pageLength = 100))
+    files_df = na.omit(files_df)
+    DT::datatable(
+      files_df,
+      selection = "single",
+      escape = FALSE,   # allow HTML icons
+      rownames = FALSE,
+      options = list(dom = 't', pageLength = 100)
+    )
+  })
 
   # Modal to show full path when row clicked
   observeEvent(input$fileTable_rows_selected,
@@ -664,8 +703,10 @@ server <- function(input, output, session)
     files_df <- plantation$get_file_table()
     full_path <- files_df$Path[selected_row]
 
+    cat("Showing:", full_path, "\n")
+
     showModal(modalDialog(
-      title = paste("Full path for row", selected_row),
+      title = paste("Full path"),
       full_path,
       easyClose = TRUE,
       footer = NULL
@@ -708,16 +749,17 @@ server <- function(input, output, session)
     out <- switch(selected_row,
                   plantation$chm,
                   plantation$schm,
+                  plantation$boundaries,
                   plantation$layout$tree_layout_oriented,
                   plantation$trees,
                   plantation$crowns
     )
 
     # Show modal depending on type
-    if (inherits(out, "SpatRaster"))
+    if (inherits(out, "SpatRaster") | inherits(out, "sfc"))
     {
       showModal(modalDialog(
-        title = paste("Raster for row", selected_row),
+        title = paste(class(out)[1], "object"),
         verbatimTextOutput("modalRasterText"),
         easyClose = TRUE,
         footer = NULL
@@ -729,15 +771,17 @@ server <- function(input, output, session)
     else if (inherits(out, "sf") || is.data.frame(out))
     {
       showModal(modalDialog(
-        title = paste("Table for row", selected_row),
+        title = paste("sf object"),
         div(
           style = "overflow-y: auto; max-height: 1000px; max-width: 1000px",
-          DT::renderDT(out, options = list(pageLength = 10, scrollX = TRUE, scrollY = "500px"))
+          DT::DTOutput("modalsfTable")   # <-- UI placeholder
         ),
         easyClose = TRUE,
         footer = NULL,
         size = "l"  # large modal
       ))
+
+      output$modalsfTable <- DT::renderDT({ out }, options = list(pageLength = 10, scrollX = TRUE, scrollY = "500px"))
     }
     else
     {
@@ -750,19 +794,18 @@ server <- function(input, output, session)
     }
   })
 
-
-
   # ==== update plot ====
   output$plantationLayoutImage <- renderPlot({
+    if (is.null(plantation$layout) || is.null(plantation$layout$tree_layout_raw)) {
+      validate(FALSE, "No block layout file selected yet")  # force message
+    }
     update_layout_plot()
-    validate(need(!is.null(plantation$layout$tree_layout_raw), "No block layout file selected yet"))
-    print(plantation$layout)
     plantation$layout$plot()
   })
 
   output$rglplot3d <- rgl::renderRglwidget({
     update_rgl_view()
-    showNotification("Rendering 3D scene")
+    show_notification("Rendering 3D scene")
     plantation$plot(TRUE)
     u = rgl::rglwidget()
     u |> rgl::toggleWidget(tags = "bbox") |>

@@ -7,6 +7,12 @@ remove_virtual_trees = function(data)
   data[data[[str]] >= 0,]
 }
 
+find_tree_zero = function(plan)
+{
+  tree_zero = plan[plan[[BLOCKNAME]] == 1 & plan[[TPOSNAME]] == 1, ]
+  as.numeric(sf::st_coordinates(sf::st_geometry(tree_zero)))
+}
+
 xls_find_sheet = function(file, valid_sheet_names, mustWork = TRUE)
 {
   sheet_names <- readxl::excel_sheets(file)
