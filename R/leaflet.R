@@ -134,25 +134,51 @@ add_warnings_layer <- function(map, layout_warnings, proxy = FALSE) {
   if (is.null(layout_warnings)) return(list(map = map, groups = NULL))
   added <- character()
 
+  if (proxy)
+  {
+    map <- map |> leaflet::clearGroup("Move")
+    map <- map |> leaflet::clearGroup("Warnings")
+    map <- map |> leaflet::removeControl("warnings_legend")
+  }
+
   # Move lines
-  if (!is.null(layout_warnings$move)) {
+  if (!is.null(layout_warnings$move))
+  {
     data_move <- sf::st_transform(layout_warnings$move, 4326)
-    if (proxy) map <- map |> leaflet::clearGroup("Move")
-    map <- map |> leaflet::addPolylines(data = data_move, group = "Move", color = "white", weight = 2, opacity = 0.9)
+
+    map <- map |> leaflet::addPolylines(
+      data = data_move,
+      group = "Move",
+      color = "white",
+      weight = 2,
+      opacity = 0.9)
     added <- c(added, "Move")
   }
 
   # Warning polygons (with legend on initial render)
-  if (!is.null(layout_warnings$warn)) {
+  if (!is.null(layout_warnings$warn))
+  {
     data_warn <- sf::st_transform(layout_warnings$warn, 4326)
     reason_vals <- data_warn$reason
-    pal <- leaflet::colorFactor(palette = c("yellow", "green"), domain = reason_vals)
+    pal <- leaflet::colorFactor(palette = c("purple", "red"), domain = reason_vals)
 
-    if (proxy) map <- map |> leaflet::clearGroup("Warnings")
-    map <- map |> leaflet::addPolygons(data = data_warn, opacity = 0.9, group = "Warnings",
-                                       color = ~pal(reason), fill = FALSE, weight = 3)
-    if (!proxy) map <- map |> leaflet::addLegend(position = "bottomleft", pal = pal, values = reason_vals, title = "Warnings")
+    map <- map |> leaflet::addPolygons(
+      data = data_warn,
+      opacity = 0.9,
+      group = "Warnings",
+      color = ~pal(reason),
+      fill = FALSE,
+      weight = 3)
+
     added <- c(added, "Warnings")
+
+    map <- map |> leaflet::addLegend(
+      position = "bottomleft",
+      pal = pal,
+      values = reason_vals,
+      title = "Warnings",
+      layerId = "warnings_legend"
+    )
   }
 
   if (length(added) == 0) list(map = map, groups = NULL) else list(map = map, groups = added)
@@ -170,13 +196,16 @@ add_crowns_layer <- function(map, crowns, proxy = FALSE) {
 }
 
 #' @export
-add_tree_layout_layer <- function(map, layout, proxy = FALSE) {
+add_tree_layout_layer <- function(map, layout, proxy = FALSE)
+{
   if (is.null(layout)) return(list(map = map, groups = NULL))
 
   if (!is.null(layout$tree_layout_adjusted)) {
     data <- sf::st_transform(layout$tree_layout_adjusted, 4326)
-  } else {
+  } else if (!is.null(layout$tree_layout_oriented)) {
     data <- sf::st_transform(layout$tree_layout_oriented, 4326)
+  } else {
+    return(list(map = map, groups = NULL))
   }
 
   data <- remove_virtual_trees(data)

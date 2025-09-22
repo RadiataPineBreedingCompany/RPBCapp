@@ -60,6 +60,11 @@ df_find_column = function(df, valid_col_names, mustWork = TRUE)
   return(col_names[res])
 }
 
+required <- function(x, msg)
+{
+  if (is.null(x)) stop(msg, call. = FALSE)
+}
+
 assert_file_exists = function(file)
 {
   if (!file.exists(file))

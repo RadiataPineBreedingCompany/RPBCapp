@@ -51,14 +51,18 @@ safe_run <- function(expr, catch_warnings = FALSE)
       ),
       error = function(e) {
         popup_error(conditionMessage(e))
+        cat(paste0("Error in ", deparse(conditionCall(e)), ": ", conditionMessage(e)), "\n")
         NULL
       }
     )
-  } else {
+  }
+  else
+  {
     tryCatch(
       expr,
       error = function(e) {
         popup_error(conditionMessage(e))
+        cat(paste0("Error in ", deparse(conditionCall(e)), ": ", conditionMessage(e)), "\n")
         NULL
       }
     )
@@ -95,7 +99,6 @@ short_path <- function(paths, max_chars = 40)
     paste0(first, .Platform$file.sep, "[...]", .Platform$file.sep, last)
   }, USE.NAMES = FALSE)
 }
-
 
 selectCRSModalDialog = function()
 {
@@ -147,7 +150,9 @@ selectCRSModalDialog = function()
 
 server <- function(input, output, session)
 {
-  plantation = Plantation$new()
+  plantation_model <- PlantationModel$new()
+  plantation <- PlantationController$new(plantation_model)
+  plantation_view <- PlantationView$new(plantation_model)
 
   update_bbox_in_maps   <- reactiveVal(0)
   update_bound_in_maps  <- reactiveVal(0)
@@ -158,12 +163,12 @@ server <- function(input, output, session)
   update_trees_in_maps  <- reactiveVal(0)
   update_debug_in_maps  <- reactiveVal(0)
 
+  update_stats_ui       <- reactiveVal(0)
+
   update_layout_plot <- reactiveVal(0)
   update_file_table  <- reactiveVal(0)
   update_state_table <- reactiveVal(0)
-  update_stats_ui    <- reactiveVal(0)
   update_rgl_view    <- reactiveVal(0)
-  update_ggplots     <- reactiveVal(0)
   saveProject        <- reactiveVal(0)
 
   output$estimatedDensityValue = renderText(NA)
@@ -216,12 +221,22 @@ server <- function(input, output, session)
       show_notification("Creation of a project")
 
       safe_run({
-        plantation <<- Plantation$new()
+        plantation$reset()
         plantation$create_config(file)
       })
 
       update_file_table(runif(1))
       update_state_table(runif(1))
+      update_stats_ui(runif(1))
+
+      update_bbox_in_maps(runif(1))
+      update_bound_in_maps(runif(1))
+      update_layout_in_maps(runif(1))
+      update_chm_in_maps(runif(1))
+      update_schm_in_maps(runif(1))
+      update_dtm_in_maps(runif(1))
+      update_trees_in_maps(runif(1))
+      update_debug_in_maps(runif(1))
     }
 
   }, ignoreInit = TRUE)
@@ -238,7 +253,7 @@ server <- function(input, output, session)
     show_notification("Loading project")
 
     safe_run({
-      plantation <<- Plantation$new()
+      plantation$reset()
       plantation$read_config(file)
     }, catch_warnings = TRUE)
 
@@ -253,19 +268,19 @@ server <- function(input, output, session)
 
       updateNumericInput(session, "blockSizeInputX",  value = x_size)
       updateNumericInput(session, "blockSizeInputY",  value = y_size)
-      updateNumericInput(session, "treeNumberInput", value = plantation$layout$num_trees)
-      updateRadioButtons(session, "partternStartChoiceRadioButton", selected = plantation$layout$start)
-      updateRadioButtons(session, "partternOrientationChoiceRadioButton", selected = plantation$layout$orientation)
+      updateNumericInput(session, "treeNumberInput", value = plantation$model$layout$num_trees)
+      updateRadioButtons(session, "partternStartChoiceRadioButton", selected = plantation$model$layout$start)
+      updateRadioButtons(session, "partternOrientationChoiceRadioButton", selected = plantation$model$layout$orientation)
     }
 
-    updateSliderInput(session, "smoothCHM", value = plantation$params$smoothCHM)
-    updateSliderInput(session, "smoothPasses", value = plantation$params$smoothPasses)
-    updateSliderInput(session, "hminAdjustTreesSlider", value = plantation$params$treesHmin)
-    updateSliderInput(session, "hminMeasureTreesSlider", value = plantation$params$crownsHmin)
-    updateSliderInput(session, "keepRandomFraction", value = plantation$params$keepRandomFraction)
-    updateSliderInput(session, "rigidness", value = plantation$params$rigidness)
-    updateSliderInput(session, "cloth_resolution", value = plantation$params$cloth_resolution)
-    updateSliderInput(session, "res", value = plantation$params$resCHM)
+    updateSliderInput(session, "smoothCHM", value = plantation$model$params$smoothCHM)
+    updateSliderInput(session, "smoothPasses", value = plantation$model$params$smoothPasses)
+    updateSliderInput(session, "hminAdjustTreesSlider", value = plantation$model$params$treesHmin)
+    updateSliderInput(session, "hminMeasureTreesSlider", value = plantation$model$params$crownsHmin)
+    updateSliderInput(session, "keepRandomFraction", value = plantation$model$params$keepRandomFraction)
+    updateSliderInput(session, "rigidness", value = plantation$model$params$rigidness)
+    updateSliderInput(session, "cloth_resolution", value = plantation$model$params$cloth_resolution)
+    updateSliderInput(session, "res", value = plantation$model$params$resCHM)
 
     cat("Estimate density\n")
 
@@ -277,14 +292,15 @@ server <- function(input, output, session)
       if (f > 1) f = 1
       output$estimatedDensityValue = renderText(d)
       output$recommandedFractionValue = renderText(f)
-      if (is.null(plantation$params$keepRandomFraction))
-        plantation$params$keepRandomFraction = f
+      if (is.null(plantation$model$params$keepRandomFraction))
+        plantation$model$params$keepRandomFraction = f
     }
 
     cat("Trigger UI update\n")
 
     update_file_table(runif(1))
     update_state_table(runif(1))
+    update_stats_ui(runif(1))
 
     update_bbox_in_maps(runif(1))
     update_bound_in_maps(runif(1))
@@ -296,9 +312,6 @@ server <- function(input, output, session)
     update_debug_in_maps(runif(1))
 
     update_rgl_view(runif(1))
-
-    update_stats_ui(runif(1))
-    update_ggplots(runif(1))
 
     cat("Project loaded\n")
 
@@ -317,7 +330,7 @@ server <- function(input, output, session)
 
       # We set the point cloud.
       # This should have set the CRS except if the LAS file has no CRS
-      if (plantation$crs == sf::NA_crs_ | is.null(plantation$crs))
+      if (is.na(plantation$get_crs()))
       {
         showModal(selectCRSModalDialog())
       }
@@ -332,6 +345,8 @@ server <- function(input, output, session)
         output$recommandedFractionValue = renderText(f)
         updateSliderInput(session, "keepRandomFraction", value = f)
       }
+
+      plantation$save()
 
       update_bbox_in_maps(runif(1))
       update_state_table(runif(1))
@@ -357,6 +372,7 @@ server <- function(input, output, session)
         input$treeNumberInput,
         input$partternStartChoiceRadioButton,
         input$partternOrientationChoiceRadioButton)
+      plantation$save()
 
       update_bound_in_maps(runif(1))
       update_layout_in_maps(runif(1))
@@ -378,6 +394,7 @@ server <- function(input, output, session)
 
     safe_run({
       plantation$set_boundaries(file)
+      plantation$save()
       update_bound_in_maps(runif(1))
       update_file_table(runif(1))
       update_state_table(runif(1))
@@ -394,6 +411,7 @@ server <- function(input, output, session)
 
     safe_run({
       plantation$set_chm(file)
+      plantation$save()
       update_chm_in_maps(runif(1))
       update_file_table(runif(1))
       update_state_table(runif(1))
@@ -410,6 +428,7 @@ server <- function(input, output, session)
 
     safe_run({
       plantation$set_layout(file)
+      plantation$save()
       update_file_table(runif(1))
       update_state_table(runif(1))
       update_layout_in_maps(runif(1))
@@ -423,6 +442,7 @@ server <- function(input, output, session)
     safe_run({
       show_notification("Smoothing CHM")
       plantation$smooth_chm(input$smoothCHM, input$smoothPasses)
+      plantation$save()
       update_schm_in_maps(runif(1))
       update_file_table(runif(1))
     })
@@ -439,6 +459,7 @@ server <- function(input, output, session)
     safe_run({
       withProgress(message = 'Tree detection', value = 0, {
         plantation$optim_layout(incProgress)
+        plantation$save()
       })
       update_layout_in_maps(runif(1))
     })
@@ -453,6 +474,7 @@ server <- function(input, output, session)
     safe_run({
       withProgress(message = 'Tree detection', value = 0, {
         plantation$align_layout(incProgress)
+        plantation$save()
       })
       update_layout_in_maps(runif(1))
       update_state_table(runif(1))
@@ -473,6 +495,7 @@ server <- function(input, output, session)
     safe_run({
       withProgress(message = 'Tree detection', value = 0, {
         plantation$adjust_layout(hmin, progress = incProgress)
+        plantation$save()
       })
       update_layout_in_maps(runif(1))
       update_debug_in_maps(runif(1))
@@ -493,18 +516,18 @@ server <- function(input, output, session)
     show_notification("Measuring trees")
 
     safe_run({
-      if (!plantation$is_adjusted())
+      if (!plantation$model$is_adjusted())
         stop("Tree location not found yet. Please run tree localisation first (tab 4)")
 
       withProgress(message = 'Tree measurement', value = 0, {
         plantation$measure_trees(hmin, progress = incProgress)
+        plantation$save()
       })
 
       update_file_table(runif(1))
       update_trees_in_maps(runif(1))
       update_state_table(runif(1))
       update_stats_ui(runif(1))
-      update_ggplots(runif(1))
     })
   }, ignoreInit = TRUE)
 
@@ -532,6 +555,7 @@ server <- function(input, output, session)
 
       M <- layout_alignment_svd(Mlocal, Mglobal)
       plantation$layout$set_matrix(M)
+      plantation$save()
 
       update_layout_in_maps(runif(1))
     })
@@ -554,6 +578,7 @@ server <- function(input, output, session)
           smoothCHM = input$smoothCHM,
           smoothPasses = input$smoothPasses,
           progress = incProgress)
+        plantation$save()
 
         update_dtm_in_maps(runif(1))
         update_chm_in_maps(runif(1))
@@ -562,8 +587,6 @@ server <- function(input, output, session)
       })
     })
 
-    update_chm_map(runif(1))
-    update_preview_map(runif(1))
     update_file_table(runif(1))
   })
 
@@ -601,7 +624,7 @@ server <- function(input, output, session)
          input$partternOrientationChoiceRadioButton),
     {
 
-      if (is.null(plantation$layout$tree_layout_raw)) return(NULL)
+      if (!plantation$has_layout()) return(NULL)
 
       plantation$set_layout_parameter(
         c(input$blockSizeInputX,input$blockSizeInputY),
@@ -609,9 +632,10 @@ server <- function(input, output, session)
         input$partternStartChoiceRadioButton,
         input$partternOrientationChoiceRadioButton)
 
-      plantation$layout$move()
+      plantation$save()
 
       update_layout_plot(runif(1))
+      update_layout_in_maps(runif(1))
     },
     ignoreInit = TRUE
   )
@@ -621,6 +645,7 @@ server <- function(input, output, session)
   observeEvent(input$confirm_crs, {
     req(input$choose_crs)
     plantation$set_crs(sf::st_crs(input$choose_crs))
+    plantation$save()
     removeModal()
     update_preview_map(runif(1))
   })
@@ -630,35 +655,9 @@ server <- function(input, output, session)
   observe({
     val <- saveProject()
     if (val == 0) return(NULL)
-    safe({ plantation$write_config() })
+    safe({ plantation$save() })
   })
 
-  # ===== OnEvent ggplot ====
-
-  observe({
-    update_ggplots()
-
-    show_notification("Update ggplots")
-
-    safe_run({
-      gglist = plantation$get_ggstats()
-
-      for (i in 1:6)
-      {
-        local({
-          j <- i
-          output[[paste0("ggplot", j)]] <- renderPlot({
-            if (j <= length(gglist)) {
-              gglist[[j]]
-            } else {
-              # return blank if not enough plots
-              ggplot2::ggplot() + ggplot2::theme_void()
-            }
-          })
-        })
-      }
-    })
-  })
 
   # ==== OnEvent Reload ====
 
@@ -690,16 +689,18 @@ server <- function(input, output, session)
     if (is.null(click)) return("Click on the map")
 
     p <- sf::st_sfc(sf::st_point(c(click$lng, click$lat)), crs = 4326)
-    p <- sf::st_transform(p, plantation$crs)
+    p <- sf::st_transform(p, plantation$get_crs())
     coords <- as.numeric(sf::st_coordinates(p))
 
-    if (is.null(plantation$layout))
+    if (!plantation$has_layout())
     {
       popup_error("Clicked but no block layout was loaded yet")
       return(NULL)
     }
 
-    plantation$layout$set_origin(coords[1], coords[2])
+    safe_run({
+      plantation$set_origin(coords[1], coords[2])
+    })
 
     HTML(sprintf("X: %.2f<br/>Y: %.2f", coords[1], coords[2]))
   })
@@ -709,65 +710,65 @@ server <- function(input, output, session)
   observeEvent(update_bbox_in_maps(), {
     # Update mapPreview with bbox layer
     proxy <- leaflet::leafletProxy("mapPreview")
-    add_bbox_layer(proxy, plantation$bbox, proxy = TRUE)
-    center_on_object(proxy, plantation$bbox)
+    add_bbox_layer(proxy, plantation$model$bbox, proxy = TRUE)
+    center_on_object(proxy, plantation$model$bbox)
 
     # Just center the other maps (no new layer)
     for (map_id in c("mapCHM", "mapTrees", "mapTreeLayout")) {
       proxy <- leaflet::leafletProxy(map_id)
-      center_on_object(proxy, plantation$bbox)
+      center_on_object(proxy, plantation$model$bbox)
     }
   })
 
   observeEvent(update_bound_in_maps(), {
     for (map_id in c("mapPreview", "mapCHM", "mapTrees", "mapTreeLayout")) {
       proxy <- leaflet::leafletProxy(map_id)
-      add_boundaries_layer(proxy, plantation$boundaries, proxy = TRUE)
+      add_boundaries_layer(proxy, plantation$model$boundaries, proxy = TRUE)
     }
   })
 
   observeEvent(update_layout_in_maps(), {
     for (map_id in c("mapPreview", "mapTreeLayout")) {
       proxy <- leaflet::leafletProxy(map_id)
-      add_block_layout_layer(proxy, plantation$layout, proxy = TRUE)
-      add_tree_layout_layer(proxy, plantation$layout, proxy = TRUE)
+      add_block_layout_layer(proxy, plantation$model$layout, proxy = TRUE)
+      add_tree_layout_layer(proxy, plantation$model$layout, proxy = TRUE)
     }
   })
 
   observeEvent(update_chm_in_maps(), {
     for (map_id in c("mapPreview", "mapCHM", "mapTrees", "mapTreeLayout")) {
       proxy <- leaflet::leafletProxy(map_id)
-      add_chm_layer(proxy, plantation$chm, proxy = TRUE)
+      add_chm_layer(proxy, plantation$model$chm, proxy = TRUE)
     }
   })
 
   observeEvent(update_schm_in_maps(), {
     for (map_id in c("mapPreview", "mapCHM", "mapTrees", "mapTreeLayout")) {
       proxy <- leaflet::leafletProxy(map_id)
-      add_schm_layer(proxy, plantation$schm, proxy = TRUE)
+      add_schm_layer(proxy, plantation$model$schm, proxy = TRUE)
     }
   })
 
   observeEvent(update_schm_in_maps(), {
     for (map_id in c("mapPreview", "mapCHM")) {
       proxy <- leaflet::leafletProxy(map_id)
-      add_dtm_layer(proxy, plantation$dtm, proxy = TRUE)
+      add_dtm_layer(proxy, plantation$model$dtm, proxy = TRUE)
     }
   })
 
   observeEvent(update_trees_in_maps(), {
     for (map_id in c("mapTrees")) {
       proxy <- leaflet::leafletProxy(map_id)
-      add_trees_layer(proxy, plantation$trees, proxy = TRUE)
-      add_crowns_layer(proxy, plantation$crowns, proxy = TRUE)
+      add_trees_layer(proxy, plantation$model$trees, proxy = TRUE)
+      add_crowns_layer(proxy, plantation$model$crowns, proxy = TRUE)
     }
   })
 
   observeEvent(update_debug_in_maps(), {
-    for (map_id in c("mapPreview")) {
+    for (map_id in c("mapTreeLayout")) {
       proxy <- leaflet::leafletProxy(map_id)
-      add_warnings_layer(proxy, plantation$layout_warnings, proxy = TRUE)
-      add_crowns_layer(proxy, plantation$crowns, proxy = TRUE)
+      add_warnings_layer(proxy, plantation$model$layout_warnings, proxy = TRUE)
+      add_crowns_layer(proxy, plantation$model$crowns, proxy = TRUE)
     }
   })
 
@@ -812,47 +813,19 @@ server <- function(input, output, session)
 
   output$stateTable <- DT::renderDT({
     update_state_table()
-
-    status_list <- plantation$state()
-
-    df <- data.frame(
-      Layer = names(status_list),
-      Status = unlist(status_list),
-      stringsAsFactors = FALSE
-    )
-
-    # Replace TRUE/FALSE with HTML icons
-    df$Status <- ifelse(
-      df$Status,
-      "<i class='fa fa-check-circle' style='color: green;'></i>",
-      "<i class='fa fa-times-circle' style='color: red;'></i>"
-    )
-
-    DT::datatable(
-      df,
-      selection = "single",
-      escape = FALSE,   # allow HTML icons
-      rownames = FALSE,
-      options = list(dom = 't', pageLength = 100)
-    )
+    plantation_view$state(DT = TRUE)
   })
 
   observeEvent(input$stateTable_rows_selected, {
-    selected_row <- input$stateTable_rows_selected
-    if (length(selected_row) == 0) return()
 
-    # Pick the object based on row index
-    out <- switch(selected_row,
-                  plantation$chm,
-                  plantation$schm,
-                  plantation$boundaries,
-                  plantation$layout$tree_layout_oriented,
-                  plantation$trees,
-                  plantation$crowns
-    )
+    selected_row <- input$stateTable_rows_selected
+    if (length(selected_row) == 0) return(NULL)
+
+    out = plantation_view$get_object_by_index(selected_row)
 
     # For SpatRaster or sf objects
-    if (inherits(out, "SpatRaster") | inherits(out, "sfc") | inherits(out, "sf")) {
+    if (inherits(out, "SpatRaster") | inherits(out, "sfc") | inherits(out, "sf"))
+    {
       showModal(modalDialog(
         title = paste(class(out)[1], "object"),
         verbatimTextOutput("modalText"),
@@ -864,8 +837,8 @@ server <- function(input, output, session)
 
       output$modalText <- renderPrint({ print(out) })
     }
-    # For data.frames
-    else if (is.data.frame(out)) {
+    else if (is.data.frame(out))
+    {
       showModal(modalDialog(
         title = paste("Data Frame"),
         div(
@@ -887,7 +860,8 @@ server <- function(input, output, session)
         autoWidth = TRUE
       ))
     }
-    else {
+    else
+    {
       showModal(modalDialog(
         title = "Unsupported type",
         paste("Cannot display object of class:", class(out)),
@@ -898,18 +872,19 @@ server <- function(input, output, session)
   })
 
   # ==== update plot ====
+
   output$plantationLayoutImage <- renderPlot({
-    if (is.null(plantation$layout) || is.null(plantation$layout$tree_layout_raw)) {
-      validate(FALSE, "No block layout file selected yet")  # force message
+    if (!plantation$has_tree_map()) {
+      validate(FALSE, "No block layout file selected yet")
     }
     update_layout_plot()
-    plantation$layout$plot()
+    plantation_view$plot_layout()
   })
 
   output$rglplot3d <- rgl::renderRglwidget({
     update_rgl_view()
     show_notification("Rendering 3D scene")
-    plantation$plot(TRUE)
+    plantation_view$rgl(TRUE)
     u = rgl::rglwidget()
     u |> rgl::toggleWidget(tags = "bbox") |>
       rgl::toggleWidget(tags = "boundaries") |>
@@ -918,63 +893,53 @@ server <- function(input, output, session)
     u
   })
 
-  # === update ui ====
 
-  output$vb_found <- renderUI({
+  # ==== update stats ui ====
+
+  observe({
     update_stats_ui()
 
-    # Measured
-    n = NA
-    p = NA
-    if (!is.null(plantation$trees))
+    stats <- plantation_view$compute_tree_stats()
+
+    output$vb_found <- shiny::renderUI({
+      value_box(
+        title = "Trees Found",
+        value = paste0(stats$found$n, " (", stats$found$p, "%)"),
+        theme_color = "success"
+      )
+    })
+
+    output$vb_missing <- shiny::renderUI({
+      value_box(
+        title = "Missing Trees",
+        value = paste0(stats$missing$n, " (", stats$missing$p, "%)"),
+        theme_color = "primary"
+      )
+    })
+
+    output$vb_non_measured <- shiny::renderUI({
+      value_box(
+        title = "Non-measured Trees",
+        value = paste0(stats$non_measured$n, " (", stats$non_measured$p, "%)"),
+        theme_color = "danger"
+      )
+    })
+
+    gglist = plantation_view$ggstats()
+
+    for (i in 1:6)
     {
-      N = nrow(plantation$trees)
-      n = sum(plantation$trees$ApexFound)
-      p = round(n/N*100,1)
+      local({
+        j <- i
+        output[[paste0("ggplot", j)]] <- shiny::renderPlot({
+          if (j <= length(gglist)) {
+            gglist[[j]]
+          } else {
+            # return blank if not enough plots
+            ggplot2::ggplot() + ggplot2::theme_void()
+          }
+        })
+      })
     }
-
-    value_box(
-      title = "Trees Found",
-      value = paste0(n, " (", p, "%)"),
-      theme_color = "success"
-    )
-  })
-
-  output$vb_missing <- renderUI({
-    update_stats_ui()
-
-    N = NA
-    n = NA
-    p = NA
-    if (!is.null(plantation$trees))
-    {
-      N = nrow(plantation$trees)
-      n = sum(plantation$trees$ApexFound | plantation$trees$TreeFound)
-      p = round((N-n)/N*100,1)
-    }
-    value_box(
-      title = "Missing Trees",
-      value = paste0((N-n), " (", p, "%)"),
-      theme_color = "primary"
-    )
-  })
-
-  output$vb_non_measured <- renderUI({
-    update_stats_ui()
-
-    n = NA
-    p = NA
-    if (!is.null(plantation$trees))
-    {
-      N = nrow(plantation$trees)
-      n = sum(!plantation$trees$ApexFound & plantation$trees$TreeFound)
-      p = round(n/N*100,1)
-    }
-
-    value_box(
-      title = "Non-measured Trees",
-      value = paste0(n, " (", p, "%)"),
-      theme_color = "danger"
-    )
   })
 }

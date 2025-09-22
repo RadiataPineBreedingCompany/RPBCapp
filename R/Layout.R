@@ -141,64 +141,6 @@ RPBCLayout <- R6::R6Class("Plantation",
       self$tree_layout_oriented  <- st_affine(self$tree_layout_raw, self$M)
       self$tree_layout_adjusted  <- NULL
       self$set_crs(crs)
-    },
-
-    # move = function()
-    # {
-    #   if (self$from_geodatabase) return()
-    #
-    #   crs = sf::st_crs(self$block_layout_raw)
-    #
-    #   angle     = self$angle
-    #   translate = self$origin
-    #   offset    = find_tree_zero(self$tree_layout_raw)
-    #   translate = translate - offset
-    #
-    #   self$block_layout_oriented <- rotate_sf(self$block_layout_raw, angle, offset)
-    #   self$tree_layout_oriented <- rotate_sf(self$tree_layout_raw, angle, offset)
-    #
-    #   shift = sf::st_sfc(sf::st_point(translate))
-    #   self$block_layout_oriented = sf::st_set_geometry(self$block_layout_oriented, sf::st_geometry(self$block_layout_oriented) + shift)
-    #   self$tree_layout_oriented = sf::st_set_geometry(self$tree_layout_oriented,  sf::st_geometry(self$tree_layout_oriented) + shift)
-    #
-    #   self$set_crs(crs)
-    #   #plot(self$tree_layout_raw$geometry, col = "red", axes = T)
-    #   #plot(self$tree_layout_oriented$geometry, col = "blue")
-    # },
-
-    plot = function(show_buffer_block = FALSE)
-    {
-      block_layout = self$block_layout_oriented
-      tree_layout = self$tree_layout_oriented
-
-      if (!show_buffer_block)
-      {
-        block_layout = remove_virtual_trees(block_layout)
-        tree_layout = remove_virtual_trees(tree_layout)
-      }
-
-      cols = rep("black", nrow(block_layout))
-      cols[block_layout$BlockID < 0] = "gray95"
-      plot(sf::st_geometry(block_layout), axes = TRUE, main = "Block and tree pattern", border = cols)
-
-      blk = split(tree_layout, tree_layout[[BLOCKNAME]])
-      blk[["-1"]] = NULL
-      lines_list <- lapply(blk, function(block) {
-        sf::st_cast(sf::st_combine(block), "LINESTRING")
-      })
-      lines = do.call(c, lines_list)
-      plot(lines, add = T, col = "gray")
-
-      cols <- sf::sf.colors(nlevels(as.factor(tree_layout$Tpos)))
-      cols <- cols[as.factor(tree_layout$Tpos)]
-      cols[tree_layout[[BLOCKNAME]] < 0] = "gray"
-
-      plot(sf::st_geometry(tree_layout), add = T, pch = 19, cex = 0.25, col = cols)
-
-      tree_zero = sf::st_geometry(tree_layout)[1]
-      plot(tree_zero, add = T, pch = 19, cex = 1, col = "red")
-
-      graphics::legend("topright", "Tree zero (block 1, tree 1)", pch = 19, col = "red")
     }
   )
 )

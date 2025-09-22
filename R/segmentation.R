@@ -104,12 +104,13 @@ relocate_trees = function(chm, echm, plan, spacing, hmin, progress = NULL)
 }
 
 #' @export
-validate_tree = function(trees, plan, spacing, hmin)
+validate_tree = function(trees, plan, spacing)
 {
   trees = remove_virtual_trees(trees)
   plan = remove_virtual_trees(plan)
 
   trees$TREEID = plan$TREEID = 1:nrow(plan)
+
   # Is there some duplicated trees?
   validation = data.table::as.data.table(sf::st_coordinates(trees))
   validation$ApexFound = trees$ApexFound
