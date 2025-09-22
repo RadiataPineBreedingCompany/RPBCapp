@@ -10,8 +10,7 @@ c <- PlantationController$new(m)
 v <- PlantationView$new(m)
 
 c$read_config(file)
-c$adjust_layout(2)
-c$measure_trees(3)
+c$export_trees(NULL)
 
 m$layout
 c$get_file_table()

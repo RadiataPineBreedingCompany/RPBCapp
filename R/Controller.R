@@ -313,6 +313,48 @@ public = list(
     self$write_config()
   },
 
+  export_trees = function(progress = NULL)
+  {
+    required(self$model$crowns, "Crowns not available")
+
+    pol = self$model$crowns
+    pol = sf::st_geometry(pol)
+    typ = sf::st_geometry_type(pol) == "POLYGON"
+    pol = pol[typ,]
+
+    n = length(pol)
+
+    prog <- make_progress(progress, n)
+    on.exit(prog$finalize(), add = TRUE)
+
+    prog$tick(1*n/3, "Reading point cloud")
+
+    if (is.null(self$model$las))
+      self$model$read_cloud(self$flas, self$model$params$keepRandomFraction)
+
+    las = self$model$las
+
+    prog$tick(2*n/3, "Extracting trees")
+
+    ids = lidR:::point_in_polygons(las, pol, by_poly = TRUE)
+
+    dir = paste0(self$wd, "/output/trees")
+    if (!dir.exists(dir))
+      dir.create(dir)
+
+    files = list.files(dir, recursive = TRUE, full.names = T)
+    file.remove(files)
+
+    for (i in seq_along(ids))
+    {
+      prog$tick(2*n/3+i, "Writing on disk trees")
+      id = ids[[i]]
+      tree = las[id]
+      file = paste0(dir, "/tree_", i, ".las")
+      lidR::writeLAS(tree, file)
+    }
+  },
+
   save_debug = function()
   {
     if (is.null(self$fdebug))

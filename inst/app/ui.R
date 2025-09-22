@@ -47,6 +47,13 @@ ui <- page_navbar(
     });
   ")),
 
+  tags$style(HTML("
+  .irs { font-size: 11px; }              /* smaller slider font */
+  .form-group { margin-bottom: 6px; }   /* tighter spacing */
+  .control-label { margin-bottom: 2px; font-size: 12px; }
+")),
+
+
   # ---- nav 1 project ----
   nav_panel(
     title = "1. Project",
@@ -165,7 +172,7 @@ ui <- page_navbar(
           tooltiped(tags$strong("CHM Parameters"), "Using the default parameters is recommanded"),
           sliderInput("res", "CHM resolution (m)", min = 0.02, max = 1, value = 0.1, step = 0.01)
         ),
-        actionButton("processPointCloudButton", "Process")
+        actionButton("processPointCloudButton", "Process"),
       ),
       div(
         style = "width: 100%; height: 100%;",
@@ -300,6 +307,9 @@ ui <- page_navbar(
           tags$p("Once the trees are detected run tree measurement"),
           sliderInput("hminMeasureTreesSlider", "Minimal height", min = 0, max = 10, value = 4.5, step = 0.25),
           actionButton("runMeasurementButton", "Measure trees")
+        ),
+        wellPanel(
+          actionButton("exportTreesButton", "Export trees")
         )
       ),
       div(

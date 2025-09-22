@@ -531,6 +531,19 @@ server <- function(input, output, session)
     })
   }, ignoreInit = TRUE)
 
+  # ===== OnClick Export Trees Button ====
+
+  observeEvent(input$exportTreesButton, {
+
+    show_notification("Exporting trees")
+
+    safe_run({
+      withProgress(message = 'Exporting trees', value = 0, {
+        plantation$export_trees(incProgress)
+      })
+    })
+  }, ignoreInit = TRUE)
+
   # ===== On Edited Feature ======
 
   observeEvent(input$mapTreeLayout_draw_edited_features, {
@@ -884,7 +897,7 @@ server <- function(input, output, session)
   output$rglplot3d <- rgl::renderRglwidget({
     update_rgl_view()
     show_notification("Rendering 3D scene")
-    plantation_view$rgl(TRUE)
+    plantation_view$rgl(2000000, TRUE)
     u = rgl::rglwidget()
     u |> rgl::toggleWidget(tags = "bbox") |>
       rgl::toggleWidget(tags = "boundaries") |>
@@ -892,6 +905,8 @@ server <- function(input, output, session)
       rgl::toggleWidget(tags = "vegetation")
     u
   })
+
+
 
 
   # ==== update stats ui ====

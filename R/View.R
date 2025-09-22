@@ -331,7 +331,7 @@ PlantationView <- R6::R6Class("PlantationView",
       out
     },
 
-    rgl = function(useNULL = FALSE)
+    rgl = function(budget = 1000000, useNULL = FALSE)
     {
       las = self$model$las
       boundaries = self$model$boundaries
@@ -392,7 +392,7 @@ PlantationView <- R6::R6Class("PlantationView",
 
       if (!is.null(las))
       {
-        ndisplay = 100000
+        ndisplay = budget/2
 
         # Ground points
         gnd = lidR::filter_ground(las)
