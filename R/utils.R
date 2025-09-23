@@ -37,6 +37,20 @@ xls_find_sheet = function(file, valid_sheet_names, mustWork = TRUE)
   return(sheet_names[res])
 }
 
+is.NullOb <- function(x)
+{
+  if(!(is.function(x))) is.null(x) | all(sapply(x, is.null)) else FALSE
+}
+
+rmNullObs <- function(x)
+{
+  if(!(is.function(x)))
+  {
+    x = x[!(sapply(x, is.NullOb))]
+    lapply(x, function(x) if (is.list(x)) rmNullObs(x) else x)
+  }
+}
+
 df_find_column = function(df, valid_col_names, mustWork = TRUE)
 {
   col_names <- colnames(df)

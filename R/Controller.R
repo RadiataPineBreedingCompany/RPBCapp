@@ -34,7 +34,12 @@ public = list(
       self$model$set_crs(crs)
   },
 
-  get_crs = function() { self$model$crs },
+  get_crs = function()
+  {
+    print("getcrs")
+    print(self$model$crs)
+    return(self$model$crs)
+  },
 
   set_cloud = function(file)
   {
@@ -47,7 +52,7 @@ public = list(
   {
     assert_file_exists(file)
     self$model$set_boundaries(file)
-    if (!is.null(self$model$boundaries))
+    if (self$model$has_boundaries())
       self$fboundaries = file
   },
 
@@ -96,8 +101,7 @@ public = list(
 
   set_layout_parameter = function(block_size, num_trees, start, orientation)
   {
-    if (is.null(self$model$crs)) stop("Cannot create a layout in a project without CRS")
-    if (is.na(self$model$crs)) stop("Cannot create a layout in a project without CRS")
+    if (!self$model$has_crs()) stop("Cannot create a layout in a project without CRS")
     required(self$model$layout, "No 'layout' object yet. Read and Excel file first")
     stopifnot(!anyNA(block_size), !is.na(num_trees), !is.na(start[1]), !is.na(orientation))
     stopifnot(is.numeric(block_size), is.numeric(num_trees), is.character(start[1]), is.character(orientation))
@@ -124,6 +128,12 @@ public = list(
   {
     required(self$model$layout, "Cannot assign an origin without a layout")
     self$model$layout$set_origin(x, y)
+  },
+
+  set_matrix = function(M)
+  {
+    stopifnot(nrow(M) == 3, ncol(M) == 3)
+    self$model$layout$set_matrix(M)
   },
 
   has_layout = function() { return(!is.null(self$model$layout)) },
@@ -182,19 +192,16 @@ public = list(
 
   smooth_chm = function(smooth = 2, passes = 2)
   {
-    if (is.null(self$model$chm))
-      stop("No CHM yet. Impossible to smooth the CHM")
-
+    if (!self$model$has_chm()) stop("No CHM yet. Impossible to smooth the CHM")
     stopifnot(is.numeric(smooth), is.numeric(passes))
     stopifnot(length(smooth) == 1, length(passes) == 1)
     stopifnot(smooth > 0, passes > 0)
 
     self$model$smooth_chm(smooth, passes)
-
     self$save_schm()
   },
 
-  align_layout = function(progress = NULL)
+  align_layout_lm = function(progress = NULL)
   {
     # Assertions
     required(self$model$layout, "Missing: layout")
@@ -222,7 +229,36 @@ public = list(
     self$model$layout_warnings <- NULL
 
     self$save_plan()
-    self$write_config()
+  },
+
+  align_layout_svd = function(edited)
+  {
+    cat("SVD alignment\n")
+
+    local <- remove_virtual_trees(self$model$layout$tree_layout_raw)
+    local <- local[edited$layerId,]
+
+    Mlocal  <- sf::st_coordinates(local)
+    Mglobal <- sf::st_coordinates(edited)
+
+    M <- layout_alignment_svd(Mlocal, Mglobal)
+
+    self$set_matrix(M)
+    self$save_plan()
+  },
+
+  replace_trees = function(edited)
+  {
+    assert_sf_point(edited)
+
+    cat("Replacing trees\n")
+    layout <- remove_virtual_trees(self$model$layout$tree_layout_oriented)
+    geom <- sf::st_geometry(layout)
+    geom[edited$layerId] <- sf::st_geometry(edited)
+    sf::st_geometry(layout) <- geom
+    self$model$layout$tree_layout_oriented <- layout
+
+    self$save_plan()
   },
 
   optim_layout = function(progress = NULL)
@@ -246,9 +282,7 @@ public = list(
     new_layout = layout_optimize_by_block(layout, blocks, chm, ws, boundaries, progress = progress)
 
     self$model$layout$tree_layout_oriented = new_layout
-    self$model$layout_warnings = validate_tree(new_layout, layout, spacing)
 
-    self$save_debug()
     self$save_plan()
     self$write_config()
   },
@@ -279,7 +313,6 @@ public = list(
     self$model$params$treesHmin = hmin
 
     self$save_debug()
-    self$save_plan()
     self$write_config()
   },
 
@@ -317,24 +350,24 @@ public = list(
   {
     required(self$model$crowns, "Crowns not available")
 
-    pol = self$model$crowns
-    pol = sf::st_geometry(pol)
-    typ = sf::st_geometry_type(pol) == "POLYGON"
-    pol = pol[typ,]
+    crowns = self$model$crowns
+    typ = sf::st_geometry_type(crowns) == "POLYGON"
+    crowns = crowns[typ,]
+    pol = sf::st_geometry(crowns)
 
     n = length(pol)
 
-    prog <- make_progress(progress, n)
+    prog <- make_progress(progress, 2*n)
     on.exit(prog$finalize(), add = TRUE)
 
-    prog$tick(1*n/3, "Reading point cloud")
+    prog$tick(1/2*n, "Reading point cloud")
 
     if (is.null(self$model$las))
       self$model$read_cloud(self$flas, self$model$params$keepRandomFraction)
 
     las = self$model$las
 
-    prog$tick(2*n/3, "Extracting trees")
+    prog$tick(n, "Extracting trees")
 
     ids = lidR:::point_in_polygons(las, pol, by_poly = TRUE)
 
@@ -347,10 +380,12 @@ public = list(
 
     for (i in seq_along(ids))
     {
-      prog$tick(2*n/3+i, "Writing on disk trees")
+      prog$tick(n+i, "Writing on disk trees")
       id = ids[[i]]
+      Pset = crowns[[BLOCKNAME]][i]
+      Tpos = crowns[[TPOSNAME]][i]
       tree = las[id]
-      file = paste0(dir, "/tree_", i, ".las")
+      file = paste0(dir, "/", BLOCKNAME, "_", Pset,  "_", TPOSNAME,  "_", Tpos, ".las")
       lidR::writeLAS(tree, file)
     }
   },
@@ -534,58 +569,6 @@ public = list(
     self$model$params = params
   },
 
-  get_file_table = function() {
-    safe_val <- function(x) if (is.null(x)) NA else x
-
-    # Mapping extensions → object type
-    type_map <- list(
-      "las"  = "LAS",
-      "laz"  = "LAS",
-      "tif"  = "Raster",
-      "tiff" = "Raster",
-      "gpkg" = "Geopackage",
-      "shp"  = "Shapefile",
-      "xlsx" = "Excel file",
-      "xls"  = "Excel file",
-      "csv"  = "CSV",
-      "rpbc" = "JSON",
-      "json" = "JSON",    # could also be sf/json depending on use
-      "txt"  = "Table"
-    )
-
-    # Mapping self$ slot names → human-readable labels
-    label_map <- list(
-      fconfig      = "Configuration file",
-      flas         = "Point cloud",
-      fboundaries  = "Boundaries",
-      fdtm         = "DTM",
-      fchm         = "CHM",
-      fschm        = "Smooth CHM",
-      fdatabase    = "RPBC database",
-      flayout      = "Layout",
-      fdebug       = "Layout warning",
-      fmeasurements= "Measurements"
-    )
-
-    # Collect all non-null file slots
-    files <- lapply(names(label_map), function(slot) {
-      path <- safe_val(self[[slot]])
-      if (is.na(path)) return(NULL)
-
-      ext <- tolower(tools::file_ext(path))
-      obj_type <- type_map[[ext]] %||% "Unknown"
-
-      list(
-        Object = label_map[[slot]],
-        Type   = obj_type,
-        Path   = path
-      )
-    })
-
-    # Bind into a data.frame
-    do.call(rbind, lapply(files, as.data.frame, stringsAsFactors = FALSE))
-  },
-
   write_config = function()
   {
     cat("Write config file\n")
@@ -673,19 +656,64 @@ public = list(
       epsg = self$model$crs$epsg
     )
 
-    is.NullOb <- function(x) if(!(is.function(x))) is.null(x) | all(sapply(x, is.null)) else FALSE
-
-    rmNullObs <- function(x) {
-      if(!(is.function(x))) {
-        x = x[!(sapply(x, is.NullOb))]
-        lapply(x, function(x) if (is.list(x)) rmNullObs(x) else x)
-      }
-    }
-
     config = rmNullObs(config)
 
     jsonlite::write_json(config, self$fconfig, pretty = TRUE, auto_unbox = TRUE, digits = 8)
   },
+
+  get_file_table = function()
+  {
+    safe_val <- function(x) if (is.null(x)) NA else x
+
+    # Mapping extensions → object type
+    type_map <- list(
+      "las"  = "LAS",
+      "laz"  = "LAS",
+      "tif"  = "Raster",
+      "tiff" = "Raster",
+      "gpkg" = "Geopackage",
+      "shp"  = "Shapefile",
+      "xlsx" = "Excel file",
+      "xls"  = "Excel file",
+      "csv"  = "CSV",
+      "rpbc" = "JSON",
+      "json" = "JSON",    # could also be sf/json depending on use
+      "txt"  = "Table"
+    )
+
+    # Mapping self$ slot names → human-readable labels
+    label_map <- list(
+      fconfig      = "Configuration file",
+      flas         = "Point cloud",
+      fboundaries  = "Boundaries",
+      fdtm         = "DTM",
+      fchm         = "CHM",
+      fschm        = "Smooth CHM",
+      fdatabase    = "RPBC database",
+      flayout      = "Layout",
+      fdebug       = "Layout warning",
+      fmeasurements= "Measurements"
+    )
+
+    # Collect all non-null file slots
+    files <- lapply(names(label_map), function(slot) {
+      path <- safe_val(self[[slot]])
+      if (is.na(path)) return(NULL)
+
+      ext <- tolower(tools::file_ext(path))
+      obj_type <- type_map[[ext]] %||% "Unknown"
+
+      list(
+        Object = label_map[[slot]],
+        Type   = obj_type,
+        Path   = path
+      )
+    })
+
+    # Bind into a data.frame
+    do.call(rbind, lapply(files, as.data.frame, stringsAsFactors = FALSE))
+  },
+
 
   reset = function()
   {

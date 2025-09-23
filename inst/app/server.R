@@ -229,14 +229,25 @@ server <- function(input, output, session)
       update_state_table(runif(1))
       update_stats_ui(runif(1))
 
-      update_bbox_in_maps(runif(1))
-      update_bound_in_maps(runif(1))
-      update_layout_in_maps(runif(1))
-      update_chm_in_maps(runif(1))
-      update_schm_in_maps(runif(1))
-      update_dtm_in_maps(runif(1))
-      update_trees_in_maps(runif(1))
-      update_debug_in_maps(runif(1))
+      output$mapTreeLayout <- leaflet::renderLeaflet({
+        make_base_map(c("CHM", "sCHM", "Boundaries", "Block layout", "Move", "Warnings", "Tree layout")) |>
+          leaflet.extras::addDrawToolbar(
+            targetGroup = "Tree layout",
+            polylineOptions = FALSE, polygonOptions = FALSE,
+            circleOptions = FALSE, rectangleOptions = FALSE,
+            markerOptions = FALSE,
+            editOptions = leaflet.extras::editToolbarOptions()
+          )
+      })
+      output$mapPreview <- leaflet::renderLeaflet({
+        make_base_map(c("DTM", "CHM", "sCHM", "Boundaries", "Block layout", "Tree layout", "Bounding box"))
+      })
+      output$mapCHM <- leaflet::renderLeaflet({
+        make_base_map(c("DTM", "CHM", "sCHM", "Boundaries"))
+      })
+      output$mapTrees <- leaflet::renderLeaflet({
+        make_base_map(c("CHM", "sCHM", "Boundaries", "Block layout", "Trees", "Crowns"))
+      })
     }
 
   }, ignoreInit = TRUE)
@@ -328,13 +339,6 @@ server <- function(input, output, session)
     safe_run({
       plantation$set_cloud(path)
 
-      # We set the point cloud.
-      # This should have set the CRS except if the LAS file has no CRS
-      if (is.na(plantation$get_crs()))
-      {
-        showModal(selectCRSModalDialog())
-      }
-
       if (!is.null(plantation$flas))
       {
         header = lidR::readLASheader(plantation$flas)
@@ -346,9 +350,18 @@ server <- function(input, output, session)
         updateSliderInput(session, "keepRandomFraction", value = f)
       }
 
-      plantation$save()
+      # We set the point cloud.
+      # This should have set the CRS except if the LAS file has no CRS
+      if (is.na(plantation$get_crs()))
+      {
+        showModal(selectCRSModalDialog())
+      }
+      else
+      {
+        plantation$save()
+        update_bbox_in_maps(runif(1))
+      }
 
-      update_bbox_in_maps(runif(1))
       update_state_table(runif(1))
       update_file_table(runif(1))
     })
@@ -407,6 +420,9 @@ server <- function(input, output, session)
 
     file <- shinyFiles::parseFilePaths(volumes, input$loadCHMFileButton)$datapath
 
+    if (is.null(file) || length(file) == 0)
+      return(NULL)
+
     show_notification("Loading CHM")
 
     safe_run({
@@ -423,6 +439,9 @@ server <- function(input, output, session)
   observeEvent(input$loadTreeMapFileButton, {
 
     file <- shinyFiles::parseFilePaths(volumes, input$loadTreeMapFileButton)$datapath
+
+    if (is.null(file) || length(file) == 0)
+      return(NULL)
 
     show_notification("Loading tree plantation design")
 
@@ -473,7 +492,8 @@ server <- function(input, output, session)
 
     safe_run({
       withProgress(message = 'Tree detection', value = 0, {
-        plantation$align_layout(incProgress)
+        plantation$set_origin(session$userData$origin[1], session$userData$origin[2])
+        plantation$align_layout_lm(incProgress)
         plantation$save()
       })
       update_layout_in_maps(runif(1))
@@ -548,26 +568,21 @@ server <- function(input, output, session)
 
   observeEvent(input$mapTreeLayout_draw_edited_features, {
 
-    show_notification("SVD alignment")
-
     edits <- input$mapTreeLayout_draw_edited_features
+    if (is.null(edits)) return(NULL)
 
-    if (is.null(edits))
-      return(NULL)
+    show_notification("Map edited")
 
     safe_run({
       geojson <- jsonlite::toJSON(edits, auto_unbox = TRUE, digits = 8)
       edited  <- geojsonsf::geojson_sf(geojson)
-      edited  <- sf::st_transform(edited, plantation$crs)
+      edited  <- sf::st_transform(edited, plantation$get_crs())
 
-      local <- RPBCapp:::remove_virtual_trees(plantation$layout$tree_layout_raw)
-      local <- local[edited$layerId,]
+      if (input$editRadioButtons == "Align")
+        plantation$align_layout_svd(edited)
+      else if (input$editRadioButtons == "Replace")
+        plantation$replace_trees(edited)
 
-      Mlocal  <- sf::st_coordinates(local)
-      Mglobal <- sf::st_coordinates(edited)
-
-      M <- layout_alignment_svd(Mlocal, Mglobal)
-      plantation$layout$set_matrix(M)
       plantation$save()
 
       update_layout_in_maps(runif(1))
@@ -660,7 +675,7 @@ server <- function(input, output, session)
     plantation$set_crs(sf::st_crs(input$choose_crs))
     plantation$save()
     removeModal()
-    update_preview_map(runif(1))
+    update_bbox_in_maps(runif(1))
   })
 
   # ===== OnEvent save ====
@@ -711,9 +726,7 @@ server <- function(input, output, session)
       return(NULL)
     }
 
-    safe_run({
-      plantation$set_origin(coords[1], coords[2])
-    })
+    session$userData$origin = coords
 
     HTML(sprintf("X: %.2f<br/>Y: %.2f", coords[1], coords[2]))
   })
@@ -781,7 +794,6 @@ server <- function(input, output, session)
     for (map_id in c("mapTreeLayout")) {
       proxy <- leaflet::leafletProxy(map_id)
       add_warnings_layer(proxy, plantation$model$layout_warnings, proxy = TRUE)
-      add_crowns_layer(proxy, plantation$model$crowns, proxy = TRUE)
     }
   })
 

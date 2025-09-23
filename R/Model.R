@@ -18,6 +18,7 @@ public = list(
 
   set_crs = function(x)
   {
+    print(x)
     if (is.na(x)) return()
 
     self$crs = sf::st_crs(x)
@@ -200,6 +201,11 @@ public = list(
       self$set_crs(sf::st_crs(self$chm))
   },
 
+  has_dtm = function()
+  {
+    return(!is.null(self$dtm))
+  },
+
   # Read the CHM from file
   set_chm = function(file)
   {
@@ -211,6 +217,7 @@ public = list(
     if (is.null(self$crs) || self$crs == sf::NA_crs_ )
       self$set_crs(sf::st_crs(self$chm))
   },
+
   # Read the smooth CHM from file
   set_schm = function(file)
   {
@@ -249,17 +256,16 @@ public = list(
     self$layout = RPBCLayout$new()
     self$layout$read_layout(file)
 
-    if (self$crs == sf::NA_crs_)
+    if (!self$has_crs())
       self$set_crs(sf::st_crs(self$layout$tree_layout_oriented))
   },
+
 
   set_layout_parameter = function(block_size, num_trees, start, orientation)
   {
     cat("Set layout parameter\n")
 
-    if (is.null(self$layout))
-      stop("No 'layout' object yet. Read and Excel file first")
-
+    required(self$layout, "No 'layout' object yet. Read and Excel file first")
     stopifnot(!anyNA(block_size), !is.na(num_trees), !is.na(start[1]), !is.na(orientation))
 
     # Construction of the layout
@@ -398,26 +404,26 @@ public = list(
 
     db = self$database
 
-    if (!BLOCKNAME  %in% names(db)) stop(paste0("Column ", BLOCKNAME, " is missing in the Excel file"))
-    if (!TPOSNAME   %in% names(db)) stop(paste0("Column ", TPOSNAME, " is missing in the Excel file"))
+    if (!BLOCKNAME  %in% names(db)) stop(paste0("Column ", BLOCKNAME, " is missing in the database"))
+    if (!TPOSNAME   %in% names(db)) stop(paste0("Column ", TPOSNAME, " is missing in the database"))
 
     tmp = merge(x, db, by = c(BLOCKNAME, TPOSNAME), all.x = TRUE)
 
     # Reorder: first all original `trees` columns, then the new ones from `db`
     tree_cols <- names(x)
-    db_cols   <- setdiff(names(tmp), tree_cols)
+    db_cols <- setdiff(names(tmp), tree_cols)
     tmp <- tmp[c(db_cols, tree_cols)]
-    tmp = sf::st_as_sf(tmp)
+    tmp <- sf::st_as_sf(tmp)
+
+    tmp = tmp[order(tmp[[BLOCKNAME]], tmp[[TPOSNAME]]), ]
 
     return(tmp)
   },
 
   smooth_chm = function(smooth = 2, passes = 2)
   {
-    if (is.null(self$chm))
-      stop("No CHM yet. Impossible to smooth the CHM")
+    required(self$chm, "No CHM yet. Impossible to smooth the CHM")
 
-    #schm = lidR::pitfill_stonge2008(self$chm)
     schm = self$chm
     w = as.integer(smooth/terra::res(schm)[1])
     if (w %% 2 == 0)  w <- w + 1
@@ -487,7 +493,21 @@ public = list(
     self$database = NULL        # dataframe
     self$crs = NULL             # sf::crs
     self$params = list()
-  }
+  },
+
+  has_crs = function()
+  {
+    if (is.null(self$crs)) return(FALSE)
+    if (is.na(self$crs))  return(FALSE)
+    return(TRUE)
+  },
+  has_cloud = function() { return((is.null(self$las))) },
+  has_boundaries = function() { return(!is.null(self$boundaries)) },
+  has_chm = function() { return(!is.null(self$chm)) },
+  has_schm = function() { return(!is.null(self$schm)) },
+  has_database = function() { return(!is.null(self$database)) },
+  has_layout = function() { return(!is.null(self$layout)) }
+
 ))
 
 validate_coordinates <- function(long, lat, east, north)

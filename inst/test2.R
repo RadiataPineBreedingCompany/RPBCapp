@@ -3,22 +3,16 @@ library(RPBCapp)
 # Read a conf file
 # ===========================
 
-file = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/example1/example1.rpbc"
+file = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/example1-base/example1.rpbc"
+db = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/BC52_1/BC52_1 linear file.xlsx"
+pb = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/BC52_1/BC52_1_Kinleith_2019_ULS_subsampled.laz"
 
 m <- PlantationModel$new()
 c <- PlantationController$new(m)
 v <- PlantationView$new(m)
 
 c$read_config(file)
-c$export_trees(NULL)
-
-m$layout
-c$get_file_table()
 v$leaflet()
-v$state()
-v$summary()
-v$plot_chm()
-
 
 # View
 # ===========================

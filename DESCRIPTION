@@ -27,7 +27,9 @@ Import:
   bslib,
   readxl
 Suggests:
-  rgl
+    knitr,
+    rgl,
+    rmarkdown
 Remotes:
     r-lidar/lasR
 License: GPL-3
@@ -49,3 +51,4 @@ Collate:
     'snake.R'
     'utils.R'
     'zzz.R'
+VignetteBuilder: knitr

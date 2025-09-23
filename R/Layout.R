@@ -58,19 +58,20 @@ RPBCLayout <- R6::R6Class("Plantation",
         if (any(!c(TPOSNAME, BLOCKNAME) %in% names(layout)))
           stop(paste0("The tree layout must have attributes named '", TPOSNAME, "' '", BLOCKNAME, "'"))
 
+
         # Estimate spacing
         d = sf::st_coordinates(layout)
         d = RANN::nn2(d, k = 4)
         d = d$nn.dists[,-1]
         self$spacing = stats::median(d)
 
-        self$tree_layout_oriented = layout[, c(TPOSNAME, BLOCKNAME, ROWNAME, COLNAME)]
+        self$tree_layout_oriented = layout[, c(TPOSNAME, BLOCKNAME)]
         self$block_layout_raw = self$tree_layout_oriented
         self$from_geodatabase = TRUE
       }
       else
       {
-        stop("Invalid file format in RPBCLayout::read_layout(). Please report.")
+        stop(paste0("Format not supported: ", ext))
       }
     },
 
@@ -212,12 +213,13 @@ generate_blocks <- function(block_layout, block_size)
     block_size_y = block_size[2]
 
   # Add extra buffer block
-  nrows = max(block_layout$BlockRow)
-  ncols = max(block_layout$BlockCol)
-  all_blocks = expand.grid(BlockID = -1, BlockRow = 0:(nrows+1), BlockCol = 0:(ncols+1))
-  all_blocks = rbind(block_layout, all_blocks)
-  all_blocks = data.table::as.data.table(all_blocks)
-  all_blocks = all_blocks[!duplicated(all_blocks, by = c("BlockRow", "BlockCol"))]
+  #nrows = max(block_layout$BlockRow)
+  #ncols = max(block_layout$BlockCol)
+  #all_blocks = expand.grid(BlockID = -1, BlockRow = 0:(nrows+1), BlockCol = 0:(ncols+1))
+  #all_blocks = rbind(block_layout, all_blocks)
+  #all_blocks = data.table::as.data.table(all_blocks)
+  #all_blocks = all_blocks[!duplicated(all_blocks, by = c("BlockRow", "BlockCol"))]
+  all_blocks = block_layout
 
   # create list of polygons
   polys <- lapply(seq_len(nrow(all_blocks)), function(i) {
@@ -268,6 +270,6 @@ generate_trees <- function(block_layout, block_size, num_trees, start, orientati
   })
 
   tree_layout <- do.call(rbind, tree_layout)
-  tree_layout
+  return(tree_layout)
 }
 

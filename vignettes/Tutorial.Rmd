@@ -1,0 +1,135 @@
+---
+title: "Tutorial"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Tutorial}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+The present document shows how to process a plantation with the Shiny app. The overall processes is always the same: (1) create a project (2) load a point cloud (3) load an Excel Database to load tree plantation layout (4) process the point cloud to produce a CHM and a smoothed CHM (5) align the layout with real data (6) detect the tree (7) measure the trees. The processing is straightforward and each page of the app must be run successively in order.
+
+## Input data standard
+
+### Point cloud
+
+Point clouds are read in format LAS or LAZ which are standard. The point cloud **must** be georeferenced, projected and in meters. Ideally it **should** have a CRS registered in the metadata. The app can deal without CRS by displaying a modal windows to manually select a CRS.
+
+### Excel database
+
+The app read RBPC's Excel file. In order for the app to read and understand properly the Excel file which are by nature non standard, the content of the files must be strongly standardized.
+
+The Excel database **must** contain a sheet name `Linear File` or  `Sorted Linear File` or `Design File`. This sheet **must** contain a computer readable table registering all the trees of the plantation. The Block Id of each tree **must** be recorded in a columns named `Pset`. The position of the tree in the block is a number ranging from 1 to `n`and **must** be registered in a column names `Tpos`.
+
+The Excel database **must** contain a sheet named `Linear Layout Map` or  `Linear Block Map` or `Block Table`. This sheet **must**  contain a computer readable table registering all the block in a linear format. The Block ID of each tree **must** be recorded in a columns named `BlockID`. The position of the in the grid **must** be recorded in columns names `BlockRow` and `BlockCol`.
+
+The Excel database **can** contain a sheet named `GPS`. If the sheet exist it **must** contain columns name `Longitude`, `Latitude` (`Long`, `Lat` accepted) and/or columns named `Easting`, `Northing`. If the columns exist they **must** be populated with coordinated defining the boundaries of the plantation. Existing columns not populated will trigger an error. To be computer readable the coordinates **must** be ordered properly to represent a valid polygon that follows the Simple Feature Standard.
+
+### Geospatial data
+
+The app support data in Geopackage or Shapefile format for vector and GeoTiff for rasters
+
+## Panel 1: project
+
+1. Create a project using the `Create a project` button.
+2. Select a location where to save the configuration project (ideally close to the point cloud)
+3. Select a point cloud. This updates the preview map at the location of the plantation. The point cloud is not loaded in memory yet.
+4. Select an RBPC Excel file. If the database follows the standard the following is happenning
+   - The app reads the block layout map and builds an internal map of the blocks
+   - The app read and load the tree database
+   - The app read the `GPS` sheets and build a spatial vector of the boundaries
+5. If the app failed at reading the boundaries the button `Select geospatial file` can be use to load a geospatial file.
+
+## Panel 2: Point cloud
+
+### Recommended density 
+
+RPBC's point cloud are extremely dense with 6.000 to 14.000 pts/m². The app will only load a fraction of that to perform computations. The first card show the estimated point density and the recommended fraction to load. It sets the cursor to the suggested value by default. The suggestion compute a fraction to reach 200 pts/m². **It is not recommended to change.**
+
+### Ground filtering
+
+The ground filtering card allow user to tune some ground point segmentation parameters. **It is not recommended to change.**. the internal routine uses the CSF algorithm. Unless the user is familliar with this routine, keep it as is it works well with dense drone datasets.
+
+### CHM resolution
+
+The last card allows for tuning the CHM resolution. The default is 10 cm. **It is not recommended to change.**.
+
+### Processing
+
+Considering all the cursors are *not recommended to change* the Point cloud tab virtually needs no user intervention. Use can just click on the `Process` button. The routine:
+
+1. Loads a fraction of the point cloud. This can take a while for particularly big files
+2. Classify ground points
+3. Build a Digitial Terrain Model
+4. Build a Canopy Height Model
+5. Smooth the Canopy Height Model
+
+Then it renders in 3D. The rending being based on WebGL a technology to render interactive 3D scene in a web page the display capacities are limited. In order to make the view fluid the renderign is limited to 2 millions points.
+
+
+## Panel 3: CHM
+
+The CHM tab allow for a fine control of the CHM smoothing. The smooth CHM has already been produced in the previous step. There is thus nothing to do unless the default smooth CHM has trouble. The ultimate smooth CHM preserved all the tree apexes without loosing accuracy. It also smooth the CHM in order to get rid of unreleavant variations.
+
+The default are good. **It is not recommended to change.**. But if somehow the default was not perfect the panel over the possibility to visualise, check and recompute. Otherwise user can move to tab 4.
+
+## Panel 4: Tree Layout
+
+From the Excel database the app produce a map of the block and a map of the trees. In order to build a correct map the routines needs to know the block sizes, the number of tree per block (6 means 6 x 6 = 36) and the ordering of the tress in each block. This is controlled by the input field provided in this pages. all the information are supposed to be know by the user. They are usually recorded somewhere in the database in a no computer readable way.
+
+Once the layout corresponds to the reality user can move to the next page.
+
+Notice the read point. This is the **Tree Zero** (Block 1, Tree 1). This tree is very important for the next step.
+
+## Panel 5: Layout alignment
+
+This is **the most** important pane of the app. The goal is to align the theoretical tree map read from the database with real trees. The app does not locate the trees automatically. This would prone to errors and in the context of the plantation we cannot affort a single error. Instead of finding the tree automatically the app uses the theoritical layout as reference and tris to find and measure the corresponding trees in the Canopy Height Model guarantying that each tree of the database is associated to a tree.
+
+In order for this to work. The theoretical map must be very well aligned with the real trees. If a theoretical tree fall in between two real trees the risk it to assign the wrong measurement to the tree of the database. Thus this panel provides tools for semi-automatic alignment
+
+### Tree Zero
+
+By default the plantation layout has no geographic information and is not aligned with real data. It is aligned with the north. In order to align the layout we need 3 figure: x and y translation and a rotation angle.
+
+In order to align it automatically the user can click the Tree Zero on the map. This give the x y translation to apply. Then by clicking on `Align trees` button the angle with be computed automatically and x-y translation will be slightly optimized to maximize the alignment.
+
+This alignment may not be perfect. It may be perfect if the real trees are perfectly aligned but if the real tree do not match with the theoretical trees some offset can be visible. If the discrepancies are small and `Optimize by block` button can enhance the results
+
+### Optimize by block
+
+Optimize by block does a extra xy alignment by block. The previous step was an overall optimization. This steps try to optimized by block. It may not be perfect.
+
+### Edit manually
+
+If the Tree Zero method fails, user can align manually by selecting the `Align` mode in the `Edit mode` card. Then click on edit on the map and move some tree are there correct location. To compute a translation and rotation a minimum of two trees properly located is needed. More is better. Then using algebra the app computes the best translation rotation to fit the positioning provided by the user. This guarantee the best possible fit. Yet if the real trees are not perfectly aligned some error are still possible. An optimization by block is doable but it is also possible to manually move some trees using the `Replace` mode.
+
+In this case the users can move some badly located trees manually and put then approximately at the correct location. The perfection is not required. At the end each tree will be relocated perfectly. The idea is to be positioned good enought to prevent any theoretical trees to match the incorrect real tree
+
+### Edit in ArcGIS
+
+Ultimately is the real plantation is really far from the theoretical layout there is not way to align the theoretical layout with really trees and thus no way to assign the correct measurement to the correct trees. In this case each tree need to be manually located. This could be done in edit mode but in practice doing it in an html page will be very cumbersome. The map can be edited in any GIS software an reloaded using the `Select file` button.
+
+### Adjustement
+
+The last step, if the alignment is decent is to run an adjustment. Each tree from the theoretical layout will be relocated at its **exact** position. The `hmin` parameters controls a threshold of height at witch a point is no longer considered as a trees. 2 m (default) means that if a tree is found to be less than 2 meters is not considered as a tree.
+
+The map is updated to show how each tree was move and which were actually found or not. The green ones are tree were an apex was found. Those tree are good. The red one are tree for which no apex was found and in addition the positioning of the tree is very close to the ground. This tree is missing and won't be messured. The orange ones are the critical ones. No apex was found but in addition the point is not close to the ground. It could be a missing trees not detected as so or an error. These trees need a user validation.
+
+After adjustment is ok user can move to the next tab
+
+## Panel 6: Measuremnt
+
+The `hmin` parameters controls a threshold of height at witch a pixel of the Smoothed CHM is no longer considered as part of the crown.  The user can play with this parameter to improve segmentation.
+
+Then click on `Measure trees` button to run the individual trees segmentation. Once the tree segmentation is good the user have the option to export every single tree of the plantation as individual point cloud.
+
+## Panel 7:  Statistics
+
+This panel show a few statistic derived from the tree segmentation process. No intervention required here.

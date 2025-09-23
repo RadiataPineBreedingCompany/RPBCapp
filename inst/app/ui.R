@@ -255,13 +255,11 @@ ui <- page_navbar(
       sidebar = sidebar(
         width = 300,
         wellPanel(
-          tags$p(tags$strong("Tree map")),
-          tags$p("If an accurate map of the tree is available load it. Otherwise the map will be generated from the block layout built in step 3."),
+          tooltiped(tags$strong("Tree map"), "If an accurate map of the tree is available load it. Otherwise the map will be generated from the block layout built in step 3."),
           shinyFiles::shinyFilesButton('loadTreeMapFileButton', 'Select file', 'Please select an geospatiale file', FALSE, icon = icon("table")),
         ),
         wellPanel(
-          tags$p(tags$strong("Tree Zero")),
-          tooltiped("Using the CHM, click on the tree zero", "This tree will be use as pivot point to align the tree layout map real trees"),
+          tooltiped(tags$strong("Tree Zero"), "This tree will be use as pivot point to align the tree layout map real trees"),
           uiOutput("clickTreeZeroInfo"),
           tooltiped("Run automatic alignment.", "Once the pivot point has been choosen accurately, this button trigger an alignment with real trees"),
           actionButton("alignLayoutButton", "Align trees")
@@ -269,6 +267,15 @@ ui <- page_navbar(
         wellPanel(
           tags$p(tags$strong("Optimization by block")),
           actionButton("optimBlockButton", "Optimize")
+        ),
+        wellPanel(
+          tags$p(tags$strong("Edit mode")),
+          radioButtons(
+            inputId = "editRadioButtons",
+            label = NULL,
+            choices = c("Align", "Replace"),
+            selected = "Align"
+          )
         ),
         wellPanel(
           tags$p(tags$strong("Run adjustment")),
