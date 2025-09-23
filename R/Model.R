@@ -18,7 +18,7 @@ public = list(
 
   set_crs = function(x)
   {
-    print(x)
+    if (is.null(x)) return()
     if (is.na(x)) return()
 
     self$crs = sf::st_crs(x)

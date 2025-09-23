@@ -103,7 +103,8 @@ assert_point_cloud_loaded = function(las)
     stop("No point cloud loaded yet")
 }
 
-assert_file_ext <- function(file, expected_ext) {
+assert_file_ext <- function(file, expected_ext)
+{
   ext <- tools::file_ext(file)
   if (tolower(ext) != tolower(expected_ext)) {
     stop(sprintf(

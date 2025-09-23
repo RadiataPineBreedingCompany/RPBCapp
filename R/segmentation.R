@@ -176,15 +176,36 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
   names(echm) = "Z"
   chm = terra::toMemory(chm)
   echm = terra::toMemory(echm)
+  trees2 = trees[, c(BLOCKNAME, TPOSNAME)]
 
-  col = lidR::pastel.colors(nrow(trees))
+  # Add some buffer trees
+  exclusion = sf::st_buffer(trees, spacing*2/3)
+  exclusion = sf::st_union(exclusion)
+  exclusion = sf::st_exterior_ring(exclusion)
+  lm = lidR::locate_trees(echm, lidR::lmf(2))
+  #plot(trees$geom, cex = 0.25, col = "blue")
+  #plot(lm$geometry, cex = 0.25, add = T)
+  #plot(exclusion, add = T)
+  buffer_trees <- lm[!sf::st_within(lm, exclusion, sparse = FALSE), ]
+  buffer_trees = sf::st_geometry(buffer_trees)
+  buffer_trees = sf::st_zm(buffer_trees)
+  #plot(buffer_trees, add = T, col = "red")
+  n = length(buffer_trees)
+  data = data.frame(ID = rep(-1, n), ID2 = -1)
+  names(data) = c(BLOCKNAME, TPOSNAME)
+  buffer_trees = cbind(data, buffer_trees)
+  buffer_trees = sf::st_as_sf(buffer_trees)
+  sf::st_crs(buffer_trees) = sf::st_crs(trees)
+  sf::st_geometry(buffer_trees) <- attr(trees, "sf_column")
+
+  trees_with_buffer_trees = rbind(trees2, buffer_trees)
 
   prog$tick(1, "Individual tree segmentation")
 
-  pos = sf::st_geometry(trees)
+  pos = sf::st_geometry(trees_with_buffer_trees)
 
   # Handle extra trees required to buffer the segmentation
-  id = 1:nrow(trees)
+  id = 1:nrow(trees_with_buffer_trees)
   seeds = sf::st_as_sf(data.frame(TREEID = id, geometry = pos))
 
   if (use_dalponte)
@@ -193,6 +214,7 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
     rcrowns = segment()
     pcrown = sf::st_as_sf(terra::as.polygons(rcrowns))
     names(pcrown)[1] = "TREEID"
+    pcrown = pcrown[pcrown$TREEID <= nrow(trees),]
   }
 
   if (!use_dalponte)
@@ -203,8 +225,6 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
 
   prog$tick(2, "Individual tree measurement")
 
-  trees = trees[pcrown$TREEID,]
-  virtual_trees = trees[[BLOCKNAME]] < 0
   nofound = trees$ApexFound == FALSE
 
   pcrown$ApexFound = trees$ApexFound
@@ -245,9 +265,6 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
   trees = trees[, order]
   order <- c(LAYOUTNAMES, "Height", "CrownArea", attr(pcrown, "sf_column"))
   pcrown = pcrown[, order]
-
-  pcrown = pcrown[virtual_trees == FALSE,]
-  trees = trees[virtual_trees == FALSE,]
 
   prog$tick(3, "Done")
 

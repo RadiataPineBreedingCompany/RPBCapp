@@ -704,7 +704,6 @@ server <- function(input, output, session)
     update_rgl_view(runif(1))
 
     update_stats_ui(runif(1))
-    update_ggplots(runif(1))
   })
 
 

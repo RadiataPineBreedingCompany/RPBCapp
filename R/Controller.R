@@ -1,6 +1,7 @@
 #' @export
 #' @include Model.R
 #' @include View.R
+#' @include utils.R
 PlantationController <- R6::R6Class("PlantationController",
 public = list(
   model = NULL,
@@ -36,9 +37,9 @@ public = list(
 
   get_crs = function()
   {
-    print("getcrs")
-    print(self$model$crs)
-    return(self$model$crs)
+    crs = self$model$crs
+    if (is.null(crs)) return(sf::NA_crs_)
+    return(crs)
   },
 
   set_cloud = function(file)
@@ -161,9 +162,6 @@ public = list(
 
     prog$tick(1, detail = "Reading points cloud...")
     self$model$read_cloud(self$flas, read_fraction)
-
-    prog$tick(2,  detail = "Clipping point cloud...")
-    self$model$clip()
 
     prog$tick(3,  detail = "Classifying ground points...")
     self$model$classify_ground(rigidness = rigidness, cloth_resolution = cloth_resolution)
