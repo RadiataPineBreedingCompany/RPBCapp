@@ -208,7 +208,7 @@ add_tree_layout_layer <- function(map, layout, proxy = FALSE)
     return(list(map = map, groups = NULL))
   }
 
-  data <- remove_virtual_trees(data)
+  data <- remove_cut_trees(data)
   if (nrow(data) == 0) return(list(map = map, groups = NULL))
 
   if ("ApexFound" %in% names(data)) {
@@ -236,7 +236,6 @@ add_tree_layout_layer <- function(map, layout, proxy = FALSE)
 add_trees_layer <- function(map, trees, proxy = FALSE) {
   if (is.null(trees)) return(list(map = map, groups = NULL))
   data <- sf::st_transform(trees, 4326)
-  data <- remove_virtual_trees(data)
   if (nrow(data) == 0) return(list(map = map, groups = NULL))
 
   pal <- leaflet::colorNumeric(palette = viridis::viridis(8), domain = data$Height)

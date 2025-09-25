@@ -11,9 +11,9 @@ m <- PlantationModel$new()
 c <- PlantationController$new(m)
 v <- PlantationView$new(m)
 
-c$set_cloud("/home/jr/Documents/Entreprise/clients/RPBC/Plantations/BC55_2/BC55_2_Kaingaroa_2023_ULS.laz")
 c$read_config(file)
-v$leaflet()
+v$plot_layout()
+v$ggstats()
 
 # View
 # ===========================

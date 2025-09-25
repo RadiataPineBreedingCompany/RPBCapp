@@ -33,7 +33,7 @@ PlantationView <- R6::R6Class("PlantationView",
         {
           cat("  Starting point:",   self$model$layout$start, "\n")
           cat("  Orientation   :",   self$model$layout$orientation, "\n")
-          cat("  Num. trees    :",   nrow(remove_virtual_trees(self$model$layout$tree_layout_raw)), "\n")
+          cat("  Num. trees    :",   nrow(remove_cut_trees(self$model$layout$tree_layout_raw)), "\n")
           cat("  Tree spacing  :", self$model$layout$spacing, "\n")
         }
       }
@@ -54,36 +54,34 @@ PlantationView <- R6::R6Class("PlantationView",
       plot(sf::st_geometry(self$model$crowns), ...)
     },
 
-    plot_layout = function(show_buffer_block = FALSE)
+    plot_layout = function()
     {
       block_layout = self$model$layout$block_layout_oriented
       tree_layout =  self$model$layout$tree_layout_oriented
-
-      if (!show_buffer_block)
-      {
-        block_layout = remove_virtual_trees(block_layout)
-        tree_layout = remove_virtual_trees(tree_layout)
-      }
 
       cols = rep("black", nrow(block_layout))
       cols[block_layout$BlockID < 0] = "gray95"
       plot(sf::st_geometry(block_layout), axes = TRUE, main = "Block and tree pattern", border = cols)
 
       blk = split(tree_layout, tree_layout[[BLOCKNAME]])
-      blk[["-1"]] = NULL
       lines_list <- lapply(blk, function(block) {
         sf::st_cast(sf::st_combine(block), "LINESTRING")
       })
       lines = do.call(c, lines_list)
       plot(lines, add = T, col = "gray")
 
-      cols <- sf::sf.colors(nlevels(as.factor(tree_layout$Tpos)))
-      cols <- cols[as.factor(tree_layout$Tpos)]
-      cols[tree_layout[[BLOCKNAME]] < 0] = "gray"
+      cut = is_cut_tree(tree_layout)
+      noncut_layout = remove_cut_trees(tree_layout)
+      cut_trees = tree_layout[cut,]
 
-      plot(sf::st_geometry(tree_layout), add = T, pch = 19, cex = 0.25, col = cols)
+      cols <- sf::sf.colors(nlevels(as.factor(noncut_layout$Tpos)))
+      cols <- cols[as.factor(noncut_layout$Tpos)]
+      cols[noncut_layout[[BLOCKNAME]] < 0] = "gray"
 
-      tree_zero = sf::st_geometry(tree_layout)[1]
+      plot(sf::st_geometry(noncut_layout), add = T, pch = 19, cex = 0.3, col = cols)
+      plot(sf::st_geometry(cut_trees), add = T, pch = 4, cex = 0.5, col = "black")
+
+      tree_zero = sf::st_geometry(noncut_layout)[1]
       plot(tree_zero, add = T, pch = 19, cex = 1, col = "red")
 
       graphics::legend("topright", "Tree zero (block 1, tree 1)", pch = 19, col = "red")

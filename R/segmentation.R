@@ -90,10 +90,13 @@ relocate_trees = function(chm, echm, plan, spacing, hmin, progress = NULL)
   tmp$Height[!is_local_max] = round(local_min_values, 2)
 
   trees = plan
+  cut  = is_cut_tree(plan)
   sf::st_geometry(trees) <- sf::st_geometry(tmp)
   trees$Height = tmp$Height
   trees$TreeFound = tmp$Height >= hmin
   trees$ApexFound = is_local_max
+  trees$ApexFound[cut] = FALSE
+  trees$TreeFound[cut] = FALSE
   trees$TreeFound[trees$ApexFound == FALSE & is.na(trees$TreeFound)] = TRUE
   sf::st_geometry(trees) = sf::st_geometry(tmp)
 

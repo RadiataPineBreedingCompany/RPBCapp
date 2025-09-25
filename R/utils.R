@@ -1,3 +1,20 @@
+is_cut_tree = function(trees)
+{
+  if (!inherits(trees, "sf")) stop("Internal error in is_cut_tree. Input not a sf object")
+
+  cut_name = df_find_column(trees, CUTNAMES)
+  if (is.null(cut_name))
+    return(rep(FALSE, nrow(trees)))
+
+  return(!is.na(trees[[cut_name]]) & trees[[cut_name]] > 0)
+}
+
+remove_cut_trees = function(trees)
+{
+  cut = is_cut_tree(trees)
+  return(trees[!cut,])
+}
+
 find_tree_zero = function(plan)
 {
   tree_zero = plan[plan[[BLOCKNAME]] == 1 & plan[[TPOSNAME]] == 1, ]

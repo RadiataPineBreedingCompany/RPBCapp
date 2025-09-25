@@ -1,7 +1,6 @@
 BLOCKNAME = "Pset"
-ROWNAME = "Prow"
-COLNAME = "Pcol"
 TPOSNAME = "Tpos"
+CUTNAMES = c("Cut", "Dead", "Removed")
 BOUNDARYSHEETNAMES = c("GPS")
 LONGITUDECOLNAMES = c("Longitude", "Long")
 LATITUDECOLNAMES = c("Latitude", "Lat")

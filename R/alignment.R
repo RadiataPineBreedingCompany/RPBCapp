@@ -8,6 +8,8 @@ layout_alignment_lm = function(layout, chm, pivot, ws, boundaries, progress = NU
 
   debug = FALSE
 
+  layout = remove_cut_trees(layout)
+
   ttps = lidR::locate_trees(chm, lidR::lmf(min(ws)))
   if (nrow(ttps) == 0)
     stop("Internal error in 'layout_alignment_lm': automatic detection of trees failed and found zero trees. Please report at info@r-lidar.com")

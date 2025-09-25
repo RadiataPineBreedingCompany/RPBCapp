@@ -38,6 +38,12 @@ The app reads RBPC's Excel file. Because Excel files are inherently non-standard
 
 The Excel database **must** contain a sheet named `Linear File`, or `Sorted Linear File`, or `Design File`. Case variations are supported (e.g., `design file`). This sheet **must** contain a computer-readable table registering all the trees in the plantation. The Block ID of each tree **must** be recorded in a column named `Pset` (no variation allowed). The position of each tree within its block, represented by a number ranging from 1 to `n`, **must** be recorded in a column named `Tpos` (no variation allowed).
 
+The table **may** contain two columns named `Longitude` and `Latitude`, which record the exact positions of at least two trees. If some trees are geolocated, the app automatically applies the algebra-based alignment of the plantation layout, as explained later in this document.
+
+The table **may** also contain a column named `Cut`, `Dead`, or `Removed`, which indicates whether a tree has been removed from the plantation. Note that if a tree is dead but not cut, it is still physically present in the point cloud. This column must be populated with either nothing or `0` for existing trees, and with any **numeric** value other than `0` for cut trees. Labeling cut trees improves alignment, reduces errors, and provides a clearer view of the plantation. Any tree flagged as cut will not be processed. 
+
+If the information is missing or incomplete, it is not a problem, partial information is better than none. If information is missing, the app will still attempt to detect cut trees. However, detection is not 100% accurate, so providing additional information when possible is recommended.
+
 #### Linear Layout
 
 The Excel database **must** also contain a sheet named `Linear Layout Map`, or `Linear Block Map`, or `Block Table`. Case variations are supported (e.g., `Linear layout map`). This sheet **must** contain a computer-readable table registering all blocks in linear format. The Block ID of each block **must** be recorded in a column named `BlockID` or `Pset`. The block's position in the grid **must** be recorded in columns named `BlockRow` and `BlockCol` (no variation allowed). Column 1, Row 1 is always at the bottom left. See the figure below for more details. This work must be done manually by an operator, the default trial layout maps from the RPBC's Excel databases being non computer readable.
