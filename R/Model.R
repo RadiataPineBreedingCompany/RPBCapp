@@ -366,7 +366,7 @@ public = list(
     self$params$cloth_resolution = cloth_resolution
   },
 
-  compute_terrain = function(res = 0.5)
+  compute_terrain = function(res = 0.1)
   {
     assert_point_cloud_loaded(self$las)
 
@@ -374,7 +374,7 @@ public = list(
     if (lidR::npoints(gnd) == 0)
       stop("No ground points. Process aborted")
 
-    gnd = lidR::decimate_points(gnd, lidR::lowest(0.5))
+    gnd = lidR::decimate_points(gnd, lidR::lowest(0.1))
     self$dtm = lidR::rasterize_terrain(gnd, res, lidR::tin())
   },
 
