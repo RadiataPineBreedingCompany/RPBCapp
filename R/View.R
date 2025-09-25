@@ -331,7 +331,7 @@ PlantationView <- R6::R6Class("PlantationView",
       out
     },
 
-    rgl = function(budget = 1000000, useNULL = FALSE)
+    rgl = function(budget = 2000000, useNULL = FALSE)
     {
       las = self$model$las
       boundaries = self$model$boundaries

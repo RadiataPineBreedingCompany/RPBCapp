@@ -260,8 +260,7 @@ public = list(
       self$set_crs(sf::st_crs(self$layout$tree_layout_oriented))
   },
 
-
-  set_layout_parameter = function(block_size, num_trees, start, orientation)
+  set_layout_parameter = function(block_size = 18.6, num_trees = 6, start = "bl", orientation = "v")
   {
     cat("Set layout parameter\n")
 
@@ -506,8 +505,9 @@ public = list(
   has_chm = function() { return(!is.null(self$chm)) },
   has_schm = function() { return(!is.null(self$schm)) },
   has_database = function() { return(!is.null(self$database)) },
-  has_layout = function() { return(!is.null(self$layout)) }
-
+  has_layout = function() { return(!is.null(self$layout)) },
+  has_trees = function() { return(!is.null(self$trees)) },
+  has_crowns = function() { return(!is.null(self$crowns)) }
 ))
 
 validate_coordinates <- function(long, lat, east, north)

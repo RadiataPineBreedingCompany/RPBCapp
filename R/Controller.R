@@ -86,11 +86,10 @@ public = list(
     self$fdatabase <- file
 
     self$set_layout(file)
+
     sheet_name <- xls_find_sheet(file, BOUNDARYSHEETNAMES, mustWork = FALSE)
     if (!is.null(sheet_name))
-    {
       self$set_boundaries(file)
-    }
   },
 
   set_measurements = function(file)
@@ -100,10 +99,20 @@ public = list(
     self$fmeasurements = file
   },
 
+  set_layout = function(file)
+  {
+    assert_file_exists(file)
+    self$model$set_layout(file)
+    self$model$set_layout_parameter() # Build with default
+
+    if (!is.null(self$has_layout()))
+      self$flayout <- file
+  },
+
   set_layout_parameter = function(block_size, num_trees, start, orientation)
   {
     if (!self$model$has_crs()) stop("Cannot create a layout in a project without CRS")
-    required(self$model$layout, "No 'layout' object yet. Read and Excel file first")
+    if (!self$model$has_layout()) stop("No 'layout' object yet. Load an Excel file first")
     stopifnot(!anyNA(block_size), !is.na(num_trees), !is.na(start[1]), !is.na(orientation))
     stopifnot(is.numeric(block_size), is.numeric(num_trees), is.character(start[1]), is.character(orientation))
 
@@ -111,23 +120,9 @@ public = list(
     self$model$layout$move()
   },
 
-  set_layout = function(file)
-  {
-    assert_file_exists(file)
-    self$model$set_layout(file)
-    self$model$set_layout_parameter(
-      self$model$layout$block_size,
-      self$model$layout$num_trees,
-      self$model$layout$start,
-      self$model$layout$orientation)
-
-    if (!is.null(self$has_layout()))
-      self$flayout <- file
-  },
-
   set_origin = function(x, y)
   {
-    required(self$model$layout, "Cannot assign an origin without a layout")
+    if (!self$model$has_layout()) stop("Cannot assign an origin without a layout")
     self$model$layout$set_origin(x, y)
   },
 
@@ -137,7 +132,7 @@ public = list(
     self$model$layout$set_matrix(M)
   },
 
-  has_layout = function() { return(!is.null(self$model$layout)) },
+  has_layout = function() { return(self$model$has_layout()) },
   has_tree_map = function() { return(!is.null(self$model$layout$tree_layout_raw)) },
 
   create_config = function(file)
@@ -146,7 +141,6 @@ public = list(
 
     self$wd <- dirname(file)
     self$fconfig <- file
-    self$write_config()
 
     if (!dir.exists(paste0(self$wd, "/output")))
       dir.create(paste0(self$wd, "/output"))
@@ -155,7 +149,7 @@ public = list(
   process_pointcloud = function(read_fraction = 1, rigidness = 2, cloth_resolution = 0.5, smoothCHM = 2, smoothPasses = 2, res = 0.1, progress = NULL)
   {
     required(self$wd, "Unitialized project without working directory")
-    required(self$flas, "No file point cloud file registered. Select a file first")
+    required(self$flas, "No file point cloud registered. Select a point cloud first")
 
     prog <- make_progress(progress, 9)
     on.exit(prog$finalize(), add = TRUE)
@@ -183,7 +177,6 @@ public = list(
     self$save_dtm()
     self$save_chm()
     self$save_schm()
-    self$write_config()
 
     prog$tick(9,  detail = "Done")
   },
@@ -201,6 +194,8 @@ public = list(
 
   align_layout_lm = function(progress = NULL)
   {
+    cat("LM alignment\n")
+
     # Assertions
     required(self$model$layout, "Missing: layout")
     required(self$model$layout$M, "Missing: affine matrix")
@@ -219,7 +214,7 @@ public = list(
 
     # Alignment
     M = layout_alignment_lm(layout, chm, pivot, ws, boundaries, progress)
-    self$model$layout$set_matrix(M)
+    self$set_matrix(M)
 
     # Reset measurement
     self$model$trees  <- NULL
@@ -233,7 +228,7 @@ public = list(
   {
     cat("SVD alignment\n")
 
-    local <- remove_virtual_trees(self$model$layout$tree_layout_raw)
+    local <- self$model$layout$tree_layout_raw
     local <- local[edited$layerId,]
 
     Mlocal  <- sf::st_coordinates(local)
@@ -250,7 +245,7 @@ public = list(
     assert_sf_point(edited)
 
     cat("Replacing trees\n")
-    layout <- remove_virtual_trees(self$model$layout$tree_layout_oriented)
+    layout <- self$model$layout$tree_layout_oriented
     geom <- sf::st_geometry(layout)
     geom[edited$layerId] <- sf::st_geometry(edited)
     sf::st_geometry(layout) <- geom
@@ -346,7 +341,7 @@ public = list(
 
   export_trees = function(progress = NULL)
   {
-    required(self$model$crowns, "Crowns not available")
+    if(!self$model$has_crowns()) stop("Crowns not available. Measure the trees first")
 
     crowns = self$model$crowns
     typ = sf::st_geometry_type(crowns) == "POLYGON"
@@ -360,7 +355,7 @@ public = list(
 
     prog$tick(1/2*n, "Reading point cloud")
 
-    if (is.null(self$model$las))
+    if (!self$model$has_cloud())
       self$model$read_cloud(self$flas, self$model$params$keepRandomFraction)
 
     las = self$model$las
@@ -369,13 +364,13 @@ public = list(
 
     ids = lidR:::point_in_polygons(las, pol, by_poly = TRUE)
 
+    # Prepare output directory
     dir = paste0(self$wd, "/output/trees")
-    if (!dir.exists(dir))
-      dir.create(dir)
-
+    if (!dir.exists(dir)) dir.create(dir)
     files = list.files(dir, recursive = TRUE, full.names = T)
     file.remove(files)
 
+    # Loop on each tree and write .las
     for (i in seq_along(ids))
     {
       prog$tick(n+i, "Writing on disk trees")

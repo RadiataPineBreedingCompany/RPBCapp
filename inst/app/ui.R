@@ -25,6 +25,13 @@ link_rlidar <- tags$a(
   target = "_blank"
 )
 
+link_vignette <- tags$a(
+  shiny::icon("book"), "Documentation",
+  href = "Tutorial.html",
+  target = "_blank"
+)
+
+
 # ---- UI ----
 
 addResourcePath("www", system.file("app/www/", package = "RPBCapp"))
@@ -190,8 +197,8 @@ ui <- page_navbar(
         width = 300,
         wellPanel(
           tags$p(tags$strong("CHM smoothing")),
-          sliderInput("smoothCHM", "CHM smoothing (m)", min = 0, max = 3, value = 1, step = 0.1),
-          sliderInput("smoothPasses", "Smoothing passes", min = 0, max = 5, value = 2, step = 1),
+          sliderInput("smoothCHM", "CHM smoothing (m)", min = 0.1, max = 3, value = 1, step = 0.1),
+          sliderInput("smoothPasses", "Smoothing passes", min = 1, max = 5, value = 2, step = 1),
           actionButton("smoothCHMButton", "Smooth")
         ),
       ),
@@ -358,6 +365,7 @@ ui <- page_navbar(
     title = "Links",
     align = "right",
     nav_item(link_shiny),
-    nav_item(link_rlidar)
+    nav_item(link_rlidar),
+    nav_item(link_vignette)
   )
 )

@@ -18,7 +18,6 @@ layout_alignment_lm = function(layout, chm, pivot, ws, boundaries, progress = NU
   if (nrow(ttps) == 0)
     stop("Internal error in 'layout_alignment_lm': trees are not withing the boundaries. Please report at info@r-lidar.com")
 
-  layout = remove_virtual_trees(layout)
   pivot2 = find_tree_zero(layout)
 
   vref = sf::st_coordinates(ttps)[,1:2]
@@ -195,9 +194,6 @@ layout_optimize_by_block = function(layout, blocks, chm, ws, boundaries, progres
   ttps = ttps[u[[1]],]
   if (nrow(ttps) == 0)
     stop("Internal error in 'layout_alignment_lm': trees are not withing the boundaries. Please report at info@r-lidar.com")
-
-  layout = remove_virtual_trees(layout)
-  blocks = remove_virtual_trees(blocks)
 
   rmse_transform <- function(params, A, B)
   {

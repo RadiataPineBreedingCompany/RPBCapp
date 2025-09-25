@@ -1,12 +1,3 @@
-remove_virtual_trees = function(data)
-{
-  str = BLOCKNAME
-  if ("BlockID" %in% names(data)) str = "BlockID"
-  if (!str %in% names(data))
-    stop(paste0("Unexpected error in remove_virtual_trees: invalid column names. There is no '", str, "' attribute.  Please report to info@r-lidar.com"))
-  data[data[[str]] >= 0,]
-}
-
 find_tree_zero = function(plan)
 {
   tree_zero = plan[plan[[BLOCKNAME]] == 1 & plan[[TPOSNAME]] == 1, ]

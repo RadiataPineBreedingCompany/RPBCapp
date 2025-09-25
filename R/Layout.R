@@ -125,8 +125,6 @@ RPBCLayout <- R6::R6Class("Plantation",
 
     set_matrix = function(M)
     {
-      if (self$from_geodatabase) return()
-
       self$M = M
       self$move()
 
@@ -134,8 +132,6 @@ RPBCLayout <- R6::R6Class("Plantation",
 
     move = function()
     {
-      if (self$from_geodatabase) return()
-
       crs = sf::st_crs(self$block_layout_raw)
 
       self$block_layout_oriented <- st_affine(self$block_layout_raw, self$M)
