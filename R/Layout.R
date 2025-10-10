@@ -40,10 +40,19 @@ RPBCLayout <- R6::R6Class("Plantation",
         sheet_name = xls_find_sheet(file, BLOCKSHEETNAMES, mustWork = TRUE)
         block_layout_table = readxl::read_excel(file, sheet = sheet_name)
 
-        expected_columns = c("BlockID", "BlockRow", "BlockCol")
+        # Backward compatibility
+        name = df_find_column(block_layout_table, c("BlockID", BLOCKNAME))
+        if (is.null(name))
+        {
+          msg = paste0("Reading ", basename(file), ", sheet ", sheet_name, ". Expected a column named 'BlockID' or 'Pset' but found none")
+          stop(msg)
+        }
+        names(block_layout_table)[names(block_layout_table) == "BlockID"] == BLOCKNAME
+
+        expected_columns = c("BlockRow", "BlockCol")
         if (!all(expected_columns %in% names(block_layout_table)))
         {
-          msg = paste0("Reading ", basename(file), ", sheet ", sheet_name, ". Expected column names 'BlockID', 'BlockRow', 'BlockCol' but found '", paste0(u, collapse = "' '"), "'.")
+          msg = paste0("Reading ", basename(file), ", sheet ", sheet_name, ". Expected column names 'BlockRow', 'BlockCol' but found '", paste0(u, collapse = "' '"), "'.")
           stop(msg)
         }
 
@@ -245,12 +254,15 @@ generate_trees <- function(block_layout, block_size, num_trees, start, orientati
   if (length(block_size) > 1)
     block_size_y = block_size[2]
 
+  blockID <- df_find_column(block_layout, c("BlockID", BLOCKNAME))
+
   sf::st_agr(block_layout) = "constant"
   block_centers <- sf::st_centroid(block_layout)
   block_centers <- sf::st_coordinates(block_centers)
-  block_centers <- cbind(block_centers, block_layout$BlockID)
+  block_centers <- cbind(block_centers, block_layout[[blockID]])
 
-  tree_layout <- lapply(1:nrow(block_centers), function(i) {
+  tree_layout <- lapply(1:nrow(block_centers), function(i)
+  {
     block <- generate_snake_coords(
       num_trees,
       block_centers[i,1],

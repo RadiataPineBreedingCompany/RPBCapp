@@ -109,8 +109,8 @@ generate_snake_coords <- function(n, cx, cy, spacing_x, spacing_y, orientation =
   grid <- expand.grid(x = offsets_x, y = rev(offsets_y))
 
   # row/column labels (optional)
-  Prow <- rep(n:1, each = n)
-  Pcol <- rep(letters[1:n], n)
+  #Prow <- rep(n:1, each = n)
+  #Pcol <- rep(letters[1:n], n)
 
   # reorder by snake pattern
   coords <- grid[order, , drop = FALSE]
