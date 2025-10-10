@@ -67,7 +67,7 @@ PlantationView <- R6::R6Class("PlantationView",
       lines_list <- lapply(blk, function(block) {
         sf::st_cast(sf::st_combine(block), "LINESTRING")
       })
-      lines = do.call(c, lines_list)
+      lines = do.call(base::c, lines_list)
       plot(lines, add = T, col = "gray")
 
       cut = is_cut_tree(tree_layout)

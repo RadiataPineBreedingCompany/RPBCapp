@@ -31,11 +31,23 @@ add_dtm_layer <- function(map, dtm, proxy = FALSE) {
   dtm_prod <- terra::terrain(dtm, v = c("slope", "aspect"), unit = "radians")
   dtm_hillshade <- terra::shade(slope = dtm_prod$slope, aspect = dtm_prod$aspect)
   dtm_hillshade <- terra::stretch(dtm_hillshade, minq = 0.02, maxq = 0.98)
-  dtm_val <- terra::values(dtm_hillshade)
-  dtm_pal <- leaflet::colorNumeric(gray.colors(10, 0, 1), dtm_val, na.color = "transparent")
+
+  if (terra::inMemory(dtm_hillshade)) {
+    o <- tempfile(fileext = ".tif")
+    terra::writeRaster(dtm_hillshade, o, overwrite = TRUE)
+    dtm_hillshade <- terra::rast(o)
+  }
+  file <- terra::sources(dtm_hillshade)
 
   if (proxy) map <- map |> leaflet::clearGroup("DTM")
-  map <- map |> leaflet::addRasterImage(dtm_hillshade, colors = dtm_pal, group = "DTM", maxBytes = 2000000)
+  map <- map |>
+    leafem::addGeotiff(
+      file,
+      colorOptions = leafem::colorOptions(palette = gray.colors(50,0,1), na.color = "transparent"),
+      resolution = 128,
+      group = "DTM",
+      autozoom = FALSE
+    )
   list(map = map, groups = "DTM")
 }
 
@@ -62,7 +74,6 @@ add_schm_layer <- function(map, schm, proxy = FALSE) {
       file,
       colorOptions = leafem::colorOptions(palette = lidR::height.colors(20), na.color = "transparent"),
       resolution = 128,
-      layerId = 1,
       group = "sCHM",
       autozoom = FALSE
     )
@@ -92,7 +103,6 @@ add_chm_layer <- function(map, chm, proxy = FALSE) {
       file,
       colorOptions = leafem::colorOptions(palette = lidR::height.colors(20), na.color = "transparent"),
       resolution = 128,
-      layerId = 0,
       group = "CHM",
       autozoom = FALSE
     )

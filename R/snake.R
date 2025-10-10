@@ -46,7 +46,8 @@ snake_pattern <- function(nx, ny, orientation = c("h", "v"), start = c("tl", "tr
 #' centered at a specified location, spaced evenly, and ordered in a "snake" pattern
 #' (back-and-forth either horizontally or vertically) starting from any of the four corners.
 #'
-#' @param n Integer. Number of points along one side of the square grid.
+#' @param nx Integer. Number of points along the X axis (columns).
+#' @param ny Integer. Number of points along the Y axis (rows).
 #' @param cx Numeric. X-coordinate of the center of the square.
 #' @param cy Numeric. Y-coordinate of the center of the square.
 #' @param spacing Numeric. Distance between adjacent points.
@@ -94,33 +95,31 @@ snake_pattern <- function(nx, ny, orientation = c("h", "v"), start = c("tl", "tr
 #' text(coords$x, coords$y, labels = seq_len(nrow(coords)), pos = 3, cex = 0.8, col = "blue")
 #' @seealso \code{\link{snake_pattern}} for generating the ordering indices only.
 #' @export
-generate_snake_coords <- function(n, cx, cy, spacing_x, spacing_y, orientation = c("h", "v"), start = c("tl", "tr", "bl", "br"))
+generate_snake_coords <- function(nx, ny = nx, cx, cy, spacing_x, spacing_y, orientation = c("h", "v"), start = c("tl", "tr", "bl", "br"))
 {
   orientation <- match.arg(orientation)
   start <- match.arg(start)
+  nx <- as.integer(nx)
+  ny <- as.integer(ny)
+  if (nx < 1 || ny < 1)
+    stop("Both nx and ny must be >= 1")
 
-  order <- snake_pattern(n, n, orientation, start)
+  # Offsets: centered around (0,0)
+  offsets_x <- seq(-(nx - 1)/2, (nx - 1)/2, length.out = nx) * (spacing_x / nx)
+  offsets_y <- seq(-(ny - 1)/2, (ny - 1)/2, length.out = ny) * (spacing_y / ny)
 
-  # compute offsets in x and y independently
-  offsets_x <- seq(-(n-1)/2, (n-1)/2) * (spacing_x / n)
-  offsets_y <- seq(-(n-1)/2, (n-1)/2) * (spacing_y / n)
-
-  # build grid, top-left first (row-major)
+  # Build row-major grid (top to bottom)
   grid <- expand.grid(x = offsets_x, y = rev(offsets_y))
 
-  # row/column labels (optional)
-  #Prow <- rep(n:1, each = n)
-  #Pcol <- rep(letters[1:n], n)
+  # Compute snake ordering
+  order <- snake_pattern(nx, ny, orientation, start)
 
-  # reorder by snake pattern
+  # Apply ordering and shift by center
   coords <- grid[order, , drop = FALSE]
   coords$x <- coords$x + cx
   coords$y <- coords$y + cy
-  coords[[TPOSNAME]] <- seq_len(nrow(coords))
-  #coords[[ROWNAME]] <- Prow[order]
-  #coords[[COLNAME]] <- Pcol[order]
+  coords$id <- seq_len(nrow(coords))
 
   coords
 }
-
 

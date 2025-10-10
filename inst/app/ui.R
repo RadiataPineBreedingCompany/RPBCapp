@@ -220,12 +220,18 @@ ui <- page_navbar(
           tags$p(tags$strong("Tree planting pattern")),
           div(
             style = "display: flex; align-items: center; gap: 6px;",
-            numericInput("blockSizeInputX", NULL, value = 18.6, min = 5, max = 50, step = 0.1, width = "80px"),
+            "Block size: ",
+            numericInput("blockSizeInputX", NULL, value = 18.6, min = 5, max = 50, step = 0.1, width = "100px"),
             tags$span("×"),
-            numericInput("blockSizeInputY", NULL, value = 18.6, min = 5, max = 50, step = 0.1, width = "80px")
+            numericInput("blockSizeInputY", NULL, value = 18.6, min = 5, max = 50, step = 0.1, width = "100px")
           ),
-          numericInput("treeNumberInput", "Number of Trees", value = 6, min = 2, max = 12, step = 1),
-
+          div(
+            style = "display: flex; align-items: center; gap: 6px;",
+            "Num. trees: ",
+            numericInput("treeNumberInputX", NULL, value = 6, min = 1, max = 15, step = 1, width = "100px"),
+            tags$span("×"),
+            numericInput("treeNumberInputY", NULL, value = 6, min = 1, max = 15, step = 1, width = "100px")
+          ),
           radioButtons(
             "partternStartChoiceRadioButton", "Select the start point:",
             choices = c("Bottom-left" = "bl",

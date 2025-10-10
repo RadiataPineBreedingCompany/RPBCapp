@@ -16,7 +16,7 @@ RPBCLayout <- R6::R6Class("Plantation",
     orientation = 'v',
     start = "bl",
     block_size = 18.6,
-    num_trees = 6,
+    num_trees = c(6, 6),
     spacing = 3.1,
 
     from_geodatabase = FALSE,
@@ -87,6 +87,9 @@ RPBCLayout <- R6::R6Class("Plantation",
     build_layout = function(block_size, num_trees, start, orientation)
     {
       if (self$from_geodatabase) return()
+
+      if (length(num_trees) == 1) num_trees = c(num_trees, num_trees)
+      if (length(num_trees) > 2)  stop("Internal error: invalid input for 'num_trees'")
 
       cat("Build layout:", block_size, num_trees, start, orientation, "\n")
 
@@ -264,7 +267,8 @@ generate_trees <- function(block_layout, block_size, num_trees, start, orientati
   tree_layout <- lapply(1:nrow(block_centers), function(i)
   {
     block <- generate_snake_coords(
-      num_trees,
+      num_trees[1],
+      num_trees[2],
       block_centers[i,1],
       block_centers[i,2],
       block_size_x,
@@ -273,6 +277,7 @@ generate_trees <- function(block_layout, block_size, num_trees, start, orientati
       orientation = orientation
     )
     block <- sf::st_as_sf(block, coords = c("x", "y"))
+    names(block)[1] <- TPOSNAME
     block[[BLOCKNAME]] <- block_centers[i,3]
     block
   })

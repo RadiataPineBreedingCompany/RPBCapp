@@ -2,7 +2,7 @@ is_cut_tree = function(trees)
 {
   if (!inherits(trees, "sf")) stop("Internal error in is_cut_tree. Input not a sf object")
 
-  cut_name = df_find_column(trees, CUTNAMES)
+  cut_name = df_find_column(trees, CUTNAMES, mustWork = FALSE)
   if (is.null(cut_name))
     return(rep(FALSE, nrow(trees)))
 

@@ -279,7 +279,8 @@ server <- function(input, output, session)
 
       updateNumericInput(session, "blockSizeInputX",  value = x_size)
       updateNumericInput(session, "blockSizeInputY",  value = y_size)
-      updateNumericInput(session, "treeNumberInput", value = plantation$model$layout$num_trees)
+      updateNumericInput(session, "treeNumberInputX", value = plantation$model$layout$num_trees[1])
+      updateNumericInput(session, "treeNumberInputY", value = plantation$model$layout$num_trees[2])
       updateRadioButtons(session, "partternStartChoiceRadioButton", selected = plantation$model$layout$start)
       updateRadioButtons(session, "partternOrientationChoiceRadioButton", selected = plantation$model$layout$orientation)
     }
@@ -382,7 +383,7 @@ server <- function(input, output, session)
       plantation$set_database(file)
       plantation$set_layout_parameter(
         c(input$blockSizeInputX, input$blockSizeInputY),
-        input$treeNumberInput,
+        c(input$treeNumberInputX, input$treeNumberInputY),
         input$partternStartChoiceRadioButton,
         input$partternOrientationChoiceRadioButton)
       plantation$save()
@@ -623,7 +624,9 @@ server <- function(input, output, session)
   output$selectedPatternImage <- renderPlot({
 
     coords = generate_snake_coords(
-      input$treeNumberInput, 0, 0, 1, 1,
+      input$treeNumberInputX,
+      input$treeNumberInputY,
+      0, 0, 1, 1,
       input$partternOrientationChoiceRadioButton,
       input$partternStartChoiceRadioButton)
 
