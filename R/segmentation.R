@@ -15,6 +15,8 @@ extract_with_buffer = function(raster, points, buffer)
 #' @export
 relocate_trees = function(chm, echm, plan, spacing, hmin, progress = NULL)
 {
+  .I <- Z <- ID <- NULL
+
   resolution = terra::res(echm)[1]
   max_adjustment = min(spacing)/2
   search_radius = resolution*sqrt(2)*1.1    # to move upward in the echm gradient
@@ -51,7 +53,7 @@ relocate_trees = function(chm, echm, plan, spacing, hmin, progress = NULL)
   # -------------------------------------------
 
   neighborhood <- extract_with_buffer(chm, tmp, search_radius)
-  local_max_values = aggregate(neighborhood$Z, by = list(neighborhood$ID), max)$x
+  local_max_values = stats::aggregate(neighborhood$Z, by = list(neighborhood$ID), max)$x
 
   tmp$Height = round(local_max_values, 2)
 
@@ -62,7 +64,7 @@ relocate_trees = function(chm, echm, plan, spacing, hmin, progress = NULL)
 
   point_values <- terra::extract(echm, tmp)[,2]
   neighborhood <- extract_with_buffer(echm, tmp, search_radius)
-  local_max_values = aggregate(neighborhood$Z, by = list(neighborhood$ID), max)$x
+  local_max_values = stats::aggregate(neighborhood$Z, by = list(neighborhood$ID), max)$x
   h = tmp$Height
   h[is.na(h)] = -1
   is_local_max <- point_values == local_max_values & distance < max_adjustment & h > hmin
@@ -81,12 +83,12 @@ relocate_trees = function(chm, echm, plan, spacing, hmin, progress = NULL)
       leaflet::addTiles() |>
       leafem::addGeotiff(terra::sources(u), colorOptions = leafem::colorOptions(palette = lidR::height.colors(20)), na.color = "transparent") |>
       leaflet::addCircleMarkers(data = sf::st_transform(tmp,4326), radius = 2, color = col[is_local_max + 1], fillOpacity = 0.9, stroke = FALSE) |>
-      leaflet::addLegend(position = "topright", colors = col, labels = c("not local max", "local max"), title = "CHM et plan corrigé")
+      leaflet::addLegend(position = "topright", colors = col, labels = c("not local max", "local max"), title = "CHM et corrected plan")
   }
 
   # For non local max, estimate the local min value. Maybe the point is in or close to a gap
   neighborhood <- extract_with_buffer(chm, plan[!is_local_max,], search_radius)
-  local_min_values = aggregate(neighborhood$Z, by = list(neighborhood$ID), min)$x
+  local_min_values = stats::aggregate(neighborhood$Z, by = list(neighborhood$ID), min)$x
   tmp$Height[!is_local_max] = round(local_min_values, 2)
 
   trees = plan
@@ -109,6 +111,8 @@ relocate_trees = function(chm, echm, plan, spacing, hmin, progress = NULL)
 #' @export
 validate_tree = function(trees, plan, spacing)
 {
+  ApexFound <- .N <- TREEID <- X <- Y <- NULL
+
   trees$TREEID = plan$TREEID = 1:nrow(plan)
 
   # Is there some duplicated trees?
@@ -222,7 +226,6 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
     pcrown <- ForestTools::mcws(treetops = seeds, CHM = echm, minHeight = hmin, IDfield = "TREEID", format = "polygons")
   }
 
-
   prog$tick(2, "Individual tree measurement")
 
   nofound = trees$ApexFound == FALSE
@@ -233,7 +236,7 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
 
   # Extract pixel values for each crown to estimate the height
   val = terra::extract(chm, pcrown)
-  height = suppressWarnings(aggregate(val$Z, by = list(val$ID), max, na.rm = TRUE)$x)
+  height = suppressWarnings(stats::aggregate(val$Z, by = list(val$ID), max, na.rm = TRUE)$x)
   height[is.infinite(height)] = NA
   height[nofound] = NA
 

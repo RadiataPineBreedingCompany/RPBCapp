@@ -4,10 +4,10 @@ make_progress <- function(progress, iterations)
 {
   if (is.null(progress)) {
     # Console mode
-    pb <- txtProgressBar(min = 0, max = iterations, style = 3)
+    pb <- utils::txtProgressBar(min = 0, max = iterations, style = 3)
     force(pb)
     return(list(
-      tick = function(i, detail = "") setTxtProgressBar(pb, i),
+      tick = function(i, detail = "") utils::setTxtProgressBar(pb, i),
       finalize = function() close(pb)
     ))
   } else {

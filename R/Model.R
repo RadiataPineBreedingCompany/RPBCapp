@@ -329,6 +329,11 @@ public = list(
       M = layout_alignment_svd(local, global)
       self$layout$set_matrix(M)
     }
+
+    # invalidate previous results
+    self$crowns = NULL
+    self$trees = NULL
+    self$layout$tree_layout_adjusted = NULL
   },
 
   set_measurements = function(file)

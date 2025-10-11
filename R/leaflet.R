@@ -1,6 +1,8 @@
 # ---- base map ----
+
 #' @export
-make_base_map <- function(groups = c()) {
+make_base_map <- function(groups = c())
+{
   leaflet::leaflet() |>
     leaflet::addProviderTiles(
       leaflet::providers$Esri.WorldImagery,
@@ -18,100 +20,99 @@ make_base_map <- function(groups = c()) {
 }
 
 # ---- raster layers ----
-#' @export
-add_dtm_layer <- function(map, dtm, proxy = FALSE) {
-  if (is.null(dtm)) return(list(map = map, groups = NULL))
+.add_raster_layer <- function(map, rast, group, palette, preprocess = NULL, proxy = FALSE)
+{
+  if (is.null(rast))
+    return(list(map = map, groups = NULL))
 
-  if (anyNA(terra::minmax(dtm)))
+  # check range validity
+  if (anyNA(terra::minmax(rast)))
   {
-    warning("Cannot determine the range value of the DTM. DTM is corrupted")
+    warning(sprintf("Cannot determine the range value of the %s. %s is corrupted", group, group))
     return(list(map = map, groups = NULL))
   }
 
-  dtm_prod <- terra::terrain(dtm, v = c("slope", "aspect"), unit = "radians")
-  dtm_hillshade <- terra::shade(slope = dtm_prod$slope, aspect = dtm_prod$aspect)
-  dtm_hillshade <- terra::stretch(dtm_hillshade, minq = 0.02, maxq = 0.98)
-
-  if (terra::inMemory(dtm_hillshade)) {
-    o <- tempfile(fileext = ".tif")
-    terra::writeRaster(dtm_hillshade, o, overwrite = TRUE)
-    dtm_hillshade <- terra::rast(o)
+  # optional preprocessing (e.g., hillshade)
+  if (!is.null(preprocess))
+  {
+    rast <- preprocess(rast)
   }
-  file <- terra::sources(dtm_hillshade)
 
-  if (proxy) map <- map |> leaflet::clearGroup("DTM")
-  map <- map |>
-    leafem::addGeotiff(
-      file,
-      colorOptions = leafem::colorOptions(palette = gray.colors(50,0,1), na.color = "transparent"),
-      resolution = 128,
-      group = "DTM",
-      autozoom = FALSE
-    )
-  list(map = map, groups = "DTM")
+  # ensure raster is on disk
+  if (terra::inMemory(rast))
+  {
+    o <- tempfile(fileext = ".tif")
+    terra::writeRaster(rast, o, overwrite = TRUE)
+    rast <- terra::rast(o)
+  }
+
+  file <- terra::sources(rast)
+
+  # clear previous group (for proxy updates)
+  if (proxy) map <- leaflet::clearGroup(map, group)
+
+  # add to map
+  map <- leafem::addGeotiff(
+    map,
+    file,
+    colorOptions = leafem::colorOptions(
+      palette = palette,
+      na.color = "transparent"
+    ),
+    resolution = 128,
+    group = group,
+    autozoom = FALSE
+  )
+
+  list(map = map, groups = group)
+}
+
+# ---- specific layers ----
+
+#' @export
+add_dtm_layer <- function(map, dtm, proxy = FALSE) {
+  hillshade_fn <- function(dtm) {
+    dtm_prod <- terra::terrain(dtm, v = c("slope", "aspect"), unit = "radians")
+    hs <- terra::shade(slope = dtm_prod$slope, aspect = dtm_prod$aspect)
+    terra::stretch(hs, minq = 0.02, maxq = 0.98)
+  }
+
+  .add_raster_layer(
+    map = map,
+    rast = dtm,
+    group = "DTM",
+    palette = grDevices::gray.colors(50, 0, 1),
+    preprocess = hillshade_fn,
+    proxy = proxy
+  )
 }
 
 #' @export
 add_schm_layer <- function(map, schm, proxy = FALSE) {
-  if (is.null(schm)) return(list(map = map, groups = NULL))
-
-  if (anyNA(terra::minmax(schm)))
-  {
-    warning("Cannot determine the range value of the sCHM. sCHM is corrupted")
-    return(list(map = map, groups = NULL))
-  }
-
-  if (terra::inMemory(schm)) {
-    o <- tempfile(fileext = ".tif")
-    terra::writeRaster(schm, o, overwrite = TRUE)
-    schm <- terra::rast(o)
-  }
-  file <- terra::sources(schm)
-
-  if (proxy) map <- map |> leaflet::clearGroup("sCHM")
-  map <- map |>
-    leafem::addGeotiff(
-      file,
-      colorOptions = leafem::colorOptions(palette = lidR::height.colors(20), na.color = "transparent"),
-      resolution = 128,
-      group = "sCHM",
-      autozoom = FALSE
-    )
-  list(map = map, groups = "sCHM")
+  .add_raster_layer(
+    map = map,
+    rast = schm,
+    group = "sCHM",
+    palette = lidR::height.colors(20),
+    proxy = proxy
+  )
 }
 
 #' @export
 add_chm_layer <- function(map, chm, proxy = FALSE) {
-  if (is.null(chm)) return(list(map = map, groups = NULL))
-
-  if (anyNA(terra::minmax(chm)))
-  {
-    warning("Cannot determine the range value of the CHM. CHM is corrupted")
-    return(list(map = map, groups = NULL))
-  }
-
-  if (terra::inMemory(chm)) {
-    o <- tempfile(fileext = ".tif")
-    terra::writeRaster(chm, o, overwrite = TRUE)
-    chm <- terra::rast(o)
-  }
-  file <- terra::sources(chm)
-
-  if (proxy) map <- map |> leaflet::clearGroup("CHM")
-  map <- map |>
-    leafem::addGeotiff(
-      file,
-      colorOptions = leafem::colorOptions(palette = lidR::height.colors(20), na.color = "transparent"),
-      resolution = 128,
-      group = "CHM",
-      autozoom = FALSE
-    )
-  list(map = map, groups = "CHM")
+  .add_raster_layer(
+    map = map,
+    rast = chm,
+    group = "CHM",
+    palette = lidR::height.colors(20),
+    proxy = proxy
+  )
 }
 
 # ---- vector layers ----
 #' @export
-add_bbox_layer <- function(map, bbox, proxy = FALSE) {
+add_bbox_layer <- function(map, bbox, proxy = FALSE)
+{
   if (is.null(bbox)) return(list(map = map, groups = NULL))
   data <- sf::st_transform(bbox, 4326)
   if (proxy) map <- map |> leaflet::clearGroup("Bounding box")
@@ -120,7 +121,8 @@ add_bbox_layer <- function(map, bbox, proxy = FALSE) {
 }
 
 #' @export
-add_boundaries_layer <- function(map, boundaries, proxy = FALSE) {
+add_boundaries_layer <- function(map, boundaries, proxy = FALSE)
+{
   if (is.null(boundaries)) return(list(map = map, groups = NULL))
   data <- sf::st_transform(boundaries, 4326)
   if (proxy) map <- map |> leaflet::clearGroup("Boundaries")
@@ -129,7 +131,8 @@ add_boundaries_layer <- function(map, boundaries, proxy = FALSE) {
 }
 
 #' @export
-add_block_layout_layer <- function(map, layout, proxy = FALSE) {
+add_block_layout_layer <- function(map, layout, proxy = FALSE)
+{
   if (is.null(layout) || is.null(layout$block_layout_oriented)) return(list(map = map, groups = NULL))
   data <- sf::st_transform(layout$block_layout_oriented, 4326)
   data <- data[data$BlockID > 0, ]
@@ -140,7 +143,8 @@ add_block_layout_layer <- function(map, layout, proxy = FALSE) {
 }
 
 #' @export
-add_warnings_layer <- function(map, layout_warnings, proxy = FALSE) {
+add_warnings_layer <- function(map, layout_warnings, proxy = FALSE)
+{
   if (is.null(layout_warnings)) return(list(map = map, groups = NULL))
   added <- character()
 
@@ -195,7 +199,8 @@ add_warnings_layer <- function(map, layout_warnings, proxy = FALSE) {
 }
 
 #' @export
-add_crowns_layer <- function(map, crowns, proxy = FALSE) {
+add_crowns_layer <- function(map, crowns, proxy = FALSE)
+{
   if (is.null(crowns)) return(list(map = map, groups = NULL))
   data <- sf::st_transform(crowns, 4326)
   data <- data[!sf::st_is_empty(data), ]
@@ -280,5 +285,13 @@ center_on_object <- function(map, sfobj)
     lng2 = unname(bb["xmax"]),
     lat2 = unname(bb["ymax"])
   )
+}
+
+# ==== Clear ====
+
+#' @export
+clear_group = function(map, group)
+{
+  map <- map |> leaflet::clearGroup(group)
 }
 

@@ -5,7 +5,8 @@
 \title{Generate coordinates in a snake pattern on a square grid}
 \usage{
 generate_snake_coords(
-  n,
+  nx,
+  ny = nx,
   cx,
   cy,
   spacing_x,
@@ -15,11 +16,11 @@ generate_snake_coords(
 )
 }
 \arguments{
-\item{n}{Integer. Number of points along one side of the square grid.}
+\item{nx, ny}{Integer. Number of points along the XY axis.}
 
-\item{cx}{Numeric. X-coordinate of the center of the square.}
+\item{cx, cy}{Numeric. XY-coordinate of the center of the block}
 
-\item{cy}{Numeric. Y-coordinate of the center of the square.}
+\item{spacing_x, spacing_y}{Numeric. Distance between adjacent points on XY axis.}
 
 \item{orientation}{Character. Either \code{"horizontal"} (snake pattern moves along rows)
 or \code{"vertical"} (snake pattern moves along columns).}
@@ -27,8 +28,6 @@ or \code{"vertical"} (snake pattern moves along columns).}
 \item{start}{Character. Starting corner of the snake. One of:
 \code{"tl"} = top-left, \code{"tr"} = top-right,
 \code{"bl"} = bottom-left, \code{"br"} = bottom-right.}
-
-\item{spacing}{Numeric. Distance between adjacent points.}
 }
 \value{
 A data frame with columns:
@@ -45,34 +44,31 @@ centered at a specified location, spaced evenly, and ordered in a "snake" patter
 }
 \examples{
 # 6×6, 1 m spacing, center at (100, 200), horizontal snake from bottom-left
-coords <- generate_snake_coords(n = 6, cx = 100, cy = 200, spacing = 1, orientation = "h", start = "bl")
+coords <- generate_snake_coords(6, 6, 100, 200, 1, 1, "h", "bl")
 plot(coords$x, coords$y, asp = 1, type = "b")
 text(coords$x, coords$y, labels = seq_len(nrow(coords)), pos = 3, cex = 0.8, col = "blue")
 
-# 6×6 grid, 0.5 m spacing, centered at (100, 200), horizontal snake from bottom-right
-coords <- generate_snake_coords(6, cx = 100, cy = 200, spacing = 0.5, orientation = "h", start = "br")
+# 6×4 grid, 0.5 m spacing, centered at (100, 200), horizontal snake from bottom-right
+coords <- generate_snake_coords(6, 4, 100, 200, 0.5, 0.05, "h", "br")
 plot(coords$x, coords$y, asp = 1, type = "b", main = "Snake Pattern")
 text(coords$x, coords$y, labels = seq_len(nrow(coords)), pos = 3, cex = 0.8, col = "blue")
 
 # 6×6 grid, 1 m spacing, centered at (100, 200), vertical snake from top-left
-coords <- generate_snake_coords(6, cx = 100, cy = 200, spacing = 1, orientation = "v", start = "tl")
+coords <- generate_snake_coords(6, 6, 100, 200, 1, 1, "v", "tl")
 plot(coords$x, coords$y, asp = 1, type = "b", main = "Snake Pattern")
 text(coords$x, coords$y, labels = seq_len(nrow(coords)), pos = 3, cex = 0.8, col = "blue")
 
 # 8×8 grid, 1 m spacing, centered at (0, 0), vertical snake from top-right
-coords <- generate_snake_coords(8, cx = 0, cy = 0, spacing = 1, orientation = "v", start = "tr")
+coords <- generate_snake_coords(8, 8, 0, 0, 1, 1, "v", "tr")
 plot(coords$x, coords$y, asp = 1, type = "b", main = "Snake Pattern")
 text(coords$x, coords$y, labels = seq_len(nrow(coords)), pos = 3, cex = 0.8, col = "blue")
 
 # 8×8 grid, 1 m spacing, centered at (0, 0), horizontal snake from top-right
-coords <- generate_snake_coords(8, cx = 0, cy = 0, spacing = 1, orientation = "h", start = "tr")
+coords <- generate_snake_coords(8, 8, 0, 0, 1, 1, "h", "tr")
 plot(coords$x, coords$y, asp = 1, type = "b", main = "Snake Pattern")
 text(coords$x, coords$y, labels = seq_len(nrow(coords)), pos = 3, cex = 0.8, col = "blue")
 
-coords <- generate_snake_coords(4, cx = 10, cy = 10, spacing = 2, orientation = "h", start = "tl")
+coords <- generate_snake_coords(4, 1, 10, 10, 2, 2, "h", "tl")
 plot(coords$x, coords$y, asp = 1, type = "b", main = "Snake Pattern")
 text(coords$x, coords$y, labels = seq_len(nrow(coords)), pos = 3, cex = 0.8, col = "blue")
-}
-\seealso{
-\code{\link{snake_pattern}} for generating the ordering indices only.
 }

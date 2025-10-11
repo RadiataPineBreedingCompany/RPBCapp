@@ -31,7 +31,7 @@ layout_alignment_lm = function(layout, chm, pivot, ws, boundaries, progress = NU
   if (debug)
   {
     plot(vref, col = "blue", asp = 1, main = "vref (blue) vs umov (red)")
-    points(umov, col = "red")
+    graphics::points(umov, col = "red")
   }
 
   prog$tick(2, "Rotation optimization")
@@ -49,8 +49,8 @@ layout_alignment_lm = function(layout, chm, pivot, ws, boundaries, progress = NU
     if (debug)
     {
       plot(B, asp = 1, main = paste("angle =", round(angle,1)))
-      points(A, col = "red")
-      points(A_rot, col = "blue")
+      graphics::points(A, col = "red")
+      graphics::points(A_rot, col = "blue")
       plot(boundaries$geometry, add = TRUE)
       cat("angle =", round(angle,1), " rms =", round(rms,2), "\n")
     }
@@ -58,7 +58,7 @@ layout_alignment_lm = function(layout, chm, pivot, ws, boundaries, progress = NU
     return(rms)
   }
 
-  res <- optimize(f = rms_distance_nn, interval = c(-180, 180), A = umov, B = vref)
+  res <- stats::optimize(f = rms_distance_nn, interval = c(-180, 180), A = umov, B = vref)
   angle = res$minimum
   cat("angle =", round(angle,1), " rms =", round(res$objective,2), "\n")
 
@@ -66,7 +66,7 @@ layout_alignment_lm = function(layout, chm, pivot, ws, boundaries, progress = NU
   {
     plot(vref, col = "blue", asp = 1)
     p  = rotate_sf(sf::st_as_sf(sf::st_sfc(sf::st_point(pivot2))), angle)
-    points(rotate_sf(layout, angle)$geometry - p$x , col = "red")
+    graphics::points(rotate_sf(layout, angle)$geometry - p$x , col = "red")
   }
 
   prog$tick(3, "Translation optimization")
@@ -82,24 +82,24 @@ layout_alignment_lm = function(layout, chm, pivot, ws, boundaries, progress = NU
 
     if (debug) {
       plot(B, asp = 1, main = paste("tx =", params[1], "ty =", params[2]))
-      points(rotated, col = "blue")
-      points(transformed, col = "red")
+      graphics::points(rotated, col = "blue")
+      graphics::points(transformed, col = "red")
     }
 
     nn <- RANN::nn2(data = B, query = transformed, k = 1)
     sqrt(mean(nn$nn.dists^2))
   }
 
-  fit <- nlm(loss, p = c(0,0), A = umov, B = vref, angle = angle)
+  fit <- stats::nlm(loss, p = c(0,0), A = umov, B = vref, angle = angle)
 
   cat("rms =", round(fit$minimum,2), " move = (", paste(round(fit$estimate,2), collapse = ", "), ")\n")
 
 
   # ---- build homogeneous transformation ----
-  θ <- -angle * pi/180
-  R <- matrix(c(cos(θ), -sin(θ), 0,
-                sin(θ),  cos(θ), 0,
-                0,       0,      1), 3, 3, byrow = TRUE)
+  theta <- -angle * pi/180
+  R <- matrix(c(cos(theta), -sin(theta), 0,
+                sin(theta),  cos(theta), 0,
+                0,           0,          1), 3, 3, byrow = TRUE)
 
   T1 <- matrix(c(1, 0, -pivot2[1],
                  0, 1, -pivot2[2],
@@ -223,8 +223,6 @@ layout_optimize_by_block = function(layout, blocks, chm, ws, boundaries, progres
     rms = sqrt(mean(d^2))
   }
 
-
-
   prog$tick(2, "Optim by block")
 
   Mats = lapply(1:length(blocks$geometry), function(i)
@@ -240,13 +238,14 @@ layout_optimize_by_block = function(layout, blocks, chm, ws, boundaries, progres
     A = sf::st_coordinates(block_layout)[,1:2]
 
     # Example: optimize
-    res <- optim(c(0, 0),
-                 rmse_transform,
-                 A = A,
-                 B = B,
-                 method = "L-BFGS-B",
-                 lower = c(-ws/3, -ws/3),
-                 upper = c(ws/3, ws/3))
+    res <- stats::optim(
+      c(0, 0),
+      rmse_transform,
+      A = A,
+      B = B,
+      method = "L-BFGS-B",
+      lower = c(-ws/3, -ws/3),
+      upper = c(ws/3, ws/3))
 
     theta_opt <- 0# res$par[1]
     t_opt <- res$par[1:2]
@@ -264,9 +263,9 @@ layout_optimize_by_block = function(layout, blocks, chm, ws, boundaries, progres
       A_trans = A_h %*% t(T_opt)
       A_trans = A_trans[,1:2]
       plot(block$geometry, axe = TRUE, main = i)
-      points(B, pch = 19)
-      points(A, col = "red", pch = 19)
-      points(A_trans, col = "blue", pch = 19)
+      graphics::points(B, pch = 19)
+      graphics::points(A, col = "red", pch = 19)
+      graphics::points(A_trans, col = "blue", pch = 19)
     }
 
     T_opt

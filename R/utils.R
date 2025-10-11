@@ -28,7 +28,7 @@ xls_find_sheet = function(file, valid_sheet_names, mustWork = TRUE)
   lc_valid_sheet_names = tolower(valid_sheet_names)
 
   res = match(lc_valid_sheet_names, lc_sheet_names)
-  res = na.omit(res)
+  res = stats::na.omit(res)
 
   if (length(res) == 0 & mustWork)
   {
@@ -66,7 +66,7 @@ df_find_column = function(df, valid_col_names, mustWork = TRUE)
   lc_valid_col_names <- tolower(valid_col_names)
 
   res <- match(lc_valid_col_names, lc_col_names)
-  res <- na.omit(res)
+  res <- stats::na.omit(res)
 
   if (length(res) == 0 && mustWork)
   {

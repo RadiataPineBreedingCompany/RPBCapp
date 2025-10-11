@@ -163,6 +163,9 @@ server <- function(input, output, session)
   update_trees_in_maps  <- reactiveVal(0)
   update_debug_in_maps  <- reactiveVal(0)
 
+  clear_trees_in_maps   <- reactiveVal(0)
+  clear_debug_in_maps   <- reactiveVal(0)
+
   update_stats_ui       <- reactiveVal(0)
 
   update_layout_plot <- reactiveVal(0)
@@ -266,66 +269,66 @@ server <- function(input, output, session)
     safe_run({
       plantation$reset()
       plantation$read_config(file)
+
+      if (!is.null(plantation$layout))
+      {
+        x_size = plantation$layout$block_size[1]
+        y_size = x_size
+        if (length(plantation$layout$block_size) == 2)
+          y_size = plantation$layout$block_size[2]
+
+        updateNumericInput(session, "blockSizeInputX",  value = x_size)
+        updateNumericInput(session, "blockSizeInputY",  value = y_size)
+        updateNumericInput(session, "treeNumberInputX", value = plantation$model$layout$num_trees[1])
+        updateNumericInput(session, "treeNumberInputY", value = plantation$model$layout$num_trees[2])
+        updateRadioButtons(session, "partternStartChoiceRadioButton", selected = plantation$model$layout$start)
+        updateRadioButtons(session, "partternOrientationChoiceRadioButton", selected = plantation$model$layout$orientation)
+      }
+
+      updateSliderInput(session, "smoothCHM", value = plantation$model$params$smoothCHM)
+      updateSliderInput(session, "smoothPasses", value = plantation$model$params$smoothPasses)
+      updateSliderInput(session, "hminAdjustTreesSlider", value = plantation$model$params$treesHmin)
+      updateSliderInput(session, "hminMeasureTreesSlider", value = plantation$model$params$crownsHmin)
+      updateSliderInput(session, "keepRandomFraction", value = plantation$model$params$keepRandomFraction)
+      updateSliderInput(session, "rigidness", value = plantation$model$params$rigidness)
+      updateSliderInput(session, "cloth_resolution", value = plantation$model$params$cloth_resolution)
+      updateSliderInput(session, "res", value = plantation$model$params$resCHM)
+
+      cat("Estimate density\n")
+
+      if (!is.null(plantation$flas))
+      {
+        header = lidR::readLASheader(plantation$flas)
+        d = round(lidR::density(header),1)
+        f = round((200/d)/0.05)*0.05
+        if (f > 1) f = 1
+        output$estimatedDensityValue = renderText(d)
+        output$recommandedFractionValue = renderText(f)
+        if (is.null(plantation$model$params$keepRandomFraction))
+          plantation$model$params$keepRandomFraction = f
+      }
+
+      cat("Trigger UI update\n")
+
+      update_file_table(runif(1))
+      update_state_table(runif(1))
+      update_stats_ui(runif(1))
+
+      update_bbox_in_maps(runif(1))
+      update_bound_in_maps(runif(1))
+      update_layout_in_maps(runif(1))
+      update_chm_in_maps(runif(1))
+      update_schm_in_maps(runif(1))
+      update_dtm_in_maps(runif(1))
+      update_trees_in_maps(runif(1))
+      update_debug_in_maps(runif(1))
+
+      update_rgl_view(runif(1))
+
+      cat("Project loaded\n")
     }, catch_warnings = TRUE)
 
     cat("Update UI sliders\n")
-
-    if (!is.null(plantation$layout))
-    {
-      x_size = plantation$layout$block_size[1]
-      y_size = x_size
-      if (length(plantation$layout$block_size) == 2)
-        y_size = plantation$layout$block_size[2]
-
-      updateNumericInput(session, "blockSizeInputX",  value = x_size)
-      updateNumericInput(session, "blockSizeInputY",  value = y_size)
-      updateNumericInput(session, "treeNumberInputX", value = plantation$model$layout$num_trees[1])
-      updateNumericInput(session, "treeNumberInputY", value = plantation$model$layout$num_trees[2])
-      updateRadioButtons(session, "partternStartChoiceRadioButton", selected = plantation$model$layout$start)
-      updateRadioButtons(session, "partternOrientationChoiceRadioButton", selected = plantation$model$layout$orientation)
-    }
-
-    updateSliderInput(session, "smoothCHM", value = plantation$model$params$smoothCHM)
-    updateSliderInput(session, "smoothPasses", value = plantation$model$params$smoothPasses)
-    updateSliderInput(session, "hminAdjustTreesSlider", value = plantation$model$params$treesHmin)
-    updateSliderInput(session, "hminMeasureTreesSlider", value = plantation$model$params$crownsHmin)
-    updateSliderInput(session, "keepRandomFraction", value = plantation$model$params$keepRandomFraction)
-    updateSliderInput(session, "rigidness", value = plantation$model$params$rigidness)
-    updateSliderInput(session, "cloth_resolution", value = plantation$model$params$cloth_resolution)
-    updateSliderInput(session, "res", value = plantation$model$params$resCHM)
-
-    cat("Estimate density\n")
-
-    if (!is.null(plantation$flas))
-    {
-      header = lidR::readLASheader(plantation$flas)
-      d = round(lidR::density(header),1)
-      f = round((200/d)/0.05)*0.05
-      if (f > 1) f = 1
-      output$estimatedDensityValue = renderText(d)
-      output$recommandedFractionValue = renderText(f)
-      if (is.null(plantation$model$params$keepRandomFraction))
-        plantation$model$params$keepRandomFraction = f
-    }
-
-    cat("Trigger UI update\n")
-
-    update_file_table(runif(1))
-    update_state_table(runif(1))
-    update_stats_ui(runif(1))
-
-    update_bbox_in_maps(runif(1))
-    update_bound_in_maps(runif(1))
-    update_layout_in_maps(runif(1))
-    update_chm_in_maps(runif(1))
-    update_schm_in_maps(runif(1))
-    update_dtm_in_maps(runif(1))
-    update_trees_in_maps(runif(1))
-    update_debug_in_maps(runif(1))
-
-    update_rgl_view(runif(1))
-
-    cat("Project loaded\n")
 
   }, ignoreInit = TRUE)
 
@@ -650,23 +653,33 @@ server <- function(input, output, session)
   observeEvent(
     list(input$blockSizeInputX,
          input$blockSizeInputY,
-         input$treeNumberInput,
+         input$treeNumberInputX,
+         input$treeNumberInputY,
          input$partternStartChoiceRadioButton,
          input$partternOrientationChoiceRadioButton),
     {
 
       if (!plantation$has_layout()) return(NULL)
 
-      plantation$set_layout_parameter(
-        c(input$blockSizeInputX,input$blockSizeInputY),
-        input$treeNumberInput,
-        input$partternStartChoiceRadioButton,
-        input$partternOrientationChoiceRadioButton)
+      safe_run({
 
-      plantation$save()
+        if (plantation_model$layout$from_geodatabase)
+          stop("Impossible to modify a layout loaded from external file")
 
-      update_layout_plot(runif(1))
-      update_layout_in_maps(runif(1))
+
+        plantation$set_layout_parameter(
+          c(input$blockSizeInputX,input$blockSizeInputY),
+          c(input$treeNumberInputX, input$treeNumberInputY),
+          input$partternStartChoiceRadioButton,
+          input$partternOrientationChoiceRadioButton)
+
+        plantation$save()
+
+        clear_trees_in_maps(runif(1))
+        clear_debug_in_maps(runif(1))
+        update_layout_plot(runif(1))
+        update_layout_in_maps(runif(1))
+      })
     },
     ignoreInit = TRUE
   )
@@ -675,10 +688,13 @@ server <- function(input, output, session)
 
   observeEvent(input$confirm_crs, {
     req(input$choose_crs)
-    plantation$set_crs(sf::st_crs(input$choose_crs))
-    plantation$save()
-    removeModal()
-    update_bbox_in_maps(runif(1))
+
+    safe_run({
+      plantation$set_crs(sf::st_crs(input$choose_crs))
+      plantation$save()
+      removeModal()
+      update_bbox_in_maps(runif(1))
+    })
   })
 
   # ===== OnEvent save ====
@@ -796,6 +812,23 @@ server <- function(input, output, session)
     for (map_id in c("mapTreeLayout")) {
       proxy <- leaflet::leafletProxy(map_id)
       add_warnings_layer(proxy, plantation$model$layout_warnings, proxy = TRUE)
+    }
+  })
+
+  observeEvent(clear_debug_in_maps(), {
+    for (map_id in c("mapTreeLayout")) {
+      proxy <- leaflet::leafletProxy(map_id)
+      clear_group(proxy, "Move")
+      clear_group(proxy, "Warnings")
+      proxy |> leaflet::removeControl("warnings_legend")
+    }
+  })
+
+  observeEvent(clear_trees_in_maps(), {
+    for (map_id in c("mapTrees")) {
+      proxy <- leaflet::leafletProxy(map_id)
+      clear_group(proxy, "Trees")
+      clear_group(proxy, "Crowns")
     }
   })
 
@@ -919,8 +952,6 @@ server <- function(input, output, session)
       rgl::toggleWidget(tags = "vegetation")
     u
   })
-
-
 
 
   # ==== update stats ui ====

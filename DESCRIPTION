@@ -11,27 +11,28 @@ Authors@R: c(
   )
 Description: Shiny app for individual tree measurement in RPBC's radiata pine plantation.
 Depends: 
-  R (>= 4.0.0), 
-  shiny,
-  bslib
-Import: 
-  lidR (>= 4.4.2),
+  R (>= 4.1.0)
+Imports: 
+  lidR (>= 4.2.2),
+  data.table,
   tools,
   terra,
-  sf,
   R6,
+  RANN,
   leaflet,
-  leaflet.extra,
+  leaflet.extras,
   leafem,
+  leafpop,
   jsonlite,
   bslib,
-  readxl
+  readxl,
+  sf,
+  shiny,
+  viridis
 Suggests:
     knitr,
     rgl,
     rmarkdown
-Remotes:
-    r-lidar/lasR
 License: GPL-3
 Encoding: UTF-8
 LazyData: true
@@ -46,7 +47,6 @@ Collate:
     'app.R'
     'globals.R'
     'leaflet.R'
-    'process_lidar.R'
     'progress.R'
     'segmentation.R'
     'snake.R'

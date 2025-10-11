@@ -24,7 +24,7 @@ The processing is straightforward, and each page of the app must be run in seque
 
 ### Point Cloud
 
-Point clouds must be provided in LAS or LAZ format, which are industry standards. The point cloud **must** be georeferenced, projected, and expressed in meters. Ideally, it **should** have a CRS registered in the metadata. If no CRS is present, the app will display a modal window to manually select one.
+Point clouds must be provided in LAS or LAZ format, which are industry standards. The point cloud **must** be georeferenced, projected, and expressed in meters. Ideally, it **should** have a CRS registered in the metadata. If no CRS is present, the application will display a modal window to manually select one.
 
 ### Geospatial Data
 
@@ -32,7 +32,7 @@ The app supports vector data in GeoPackage or Shapefile formats, and raster data
 
 ### RBPC's Excel Database
 
-The app reads RBPC's Excel file. Because Excel files are inherently non-standard, their content must be strongly standardized to be properly interpreted by the app.
+The app reads RBPC's Excel file. Because Excel files are inherently non-standard, their content must be strongly standardized to be properly interpreted by the application.
 
 #### Linear File
 
@@ -46,13 +46,23 @@ If the information is missing or incomplete, it is not a problem, partial inform
 
 #### Linear Layout
 
-The Excel database **must** also contain a sheet named `Linear Layout Map`, or `Linear Block Map`, or `Block Table`. Case variations are supported (e.g., `Linear layout map`). This sheet **must** contain a computer-readable table registering all blocks in linear format. The Block ID of each block **must** be recorded in a column named `BlockID` or `Pset`. The block's position in the grid **must** be recorded in columns named `BlockRow` and `BlockCol` (no variation allowed). Column 1, Row 1 is always at the bottom left. See the figure below for more details. This work must be done manually by an operator, the default trial layout maps from the RPBC's Excel databases being non computer readable.
+The Excel database **must** also contain a sheet named `Linear Layout Map`, or `Linear Block Map`, or `Block Table`. Case variations are supported (e.g., `Linear layout map`). This sheet **must** contain a computer-readable table registering all blocks in linear format. The Block ID of each block **must** be recorded in a column named `BlockID` or `Pset` (`Pset` should be preferred). The block's position in the grid **must** be recorded in columns named `BlockRow` and `BlockCol` (no variation allowed). Column 1, Row 1 is always at the bottom left. See the figure below for more details. This work must be done manually by an operator, the default trial layout maps from the RPBC's Excel databases being non computer readable.
 
 ![](linearlayoutmap.png){width=75%}
 
+It is possible to represent a non-perfectly aligned block layouts. The `Linear Layout Map` actually records the center of each block. On a well-aligned grid of blocks, those numbers are integers, but decimal numbers are allowed to represent more complex block layouts.
+
+![](complexlinearlayoutmap.png){width=75%}
+
+Since this job must be done manually, for a very complex design it might be worth creating a simple grid, letting the app generate the geospatial file, and then editing the file in GIS software later (see the following sections).
+
+Non square blocks are represented the same way. The unit is a block. Block sizes are registered later in the app. At this stage we don't know (and don't care) of block sizes.
+
+![](rectlinearlayoutmap.png){width=75%}
+
 #### Boundaries
 
-The Excel database **may** contain a sheet named `GPS`. If this sheet exists, it **must** contain columns named `Longitude` and `Latitude` (`Long` and `Lat` are also accepted) and/or columns named `Easting` and `Northing`. If these columns are present, they **must** be populated with coordinates defining the plantation boundaries. Empty columns will trigger an error. To be computer-readable, the coordinates **must** be ordered to represent a valid polygon that complies with the Simple Feature Standard. The polygon **must not** be explicitly closed; the internal routine will close it automatically. `Easting` and `Northing`, if present, **MUST** use the same projection as the point cloud. Since Excel files are generic content files, there is no way to register a Coordinate Reference System (CRS), and therefore no standard way to determine in which CRS the coordinates are recorded. For this reason, the app assumes that the coordinates use the same CRS as the point cloud. If `Longitude` and `Latitude` are recorded, they take precedence over `Easting` and `Northing`. This ensures compatibility and avoids potential CRS issues associated with projected coordinates.
+The Excel database **may** contain a sheet named `GPS` registering the boundaries of the plantation. **If this sheet exists**, it **must** contain columns named `Longitude` and `Latitude` (`Long` and `Lat` are also accepted) and/or columns named `Easting` and `Northing`. If these columns are present, they **must** be populated with coordinates defining the plantation boundaries. Empty columns will trigger an error. To be computer-readable, the coordinates **must** be ordered to represent a valid polygon that complies with the Simple Feature Standard. The polygon **must not** be explicitly closed; the internal routine will close it automatically. `Easting` and `Northing`, if present, **must** use the same projection as the point cloud. Since Excel files are generic content files, there is no way to register a Coordinate Reference System (CRS), and therefore no standard way to determine in which CRS the coordinates are recorded. For this reason, the app assumes that the coordinates use the same CRS as the point cloud. If `Longitude` and `Latitude` are recorded, they take precedence over `Easting` and `Northing`. This ensures compatibility and avoids potential CRS issues associated with projected coordinates.
 
 ## Panel 1: Project
 
@@ -67,7 +77,10 @@ The Excel database **may** contain a sheet named `GPS`. If this sheet exists, it
    - The app reads the `GPS` sheets and builds a spatial vector of the boundaries.
 5. If the app fails to read the boundaries, the `Select geospatial file` button can be used to load a geospatial file.
 
-Having the plantation boundaries is mandatory. The `Boundaries` row in the `Project state` table **must** be green before proceeding further.
+
+If the RBPC Excel file does not comply with the required standard, the user will receive a (hopefully) informative error message. If the error message is not informative, please report it. If the app crashes, please report it as well.
+
+Having the plantation boundaries is **mandatory**. The `Boundaries` row in the `Project state` table **must** be green before proceeding further.
 
 ## Panel 2: Point cloud
 
@@ -77,6 +90,8 @@ Having the plantation boundaries is mandatory. The `Boundaries` row in the `Proj
 ### Recommended Density 
 
 RPBC's point clouds are extremely (excessively) dense, ranging from 2,000 to 14,000 pts/m². The app only loads a fraction of this data to perform computations. The first card shows the estimated point density and the recommended fraction to load. By default, the cursor is set to this suggested value. The suggestion is calculated as a fraction that targets approximately 200 pts/m². **It is not recommended to change this setting.**
+
+In order to compute faster, it is recommended to work with pre-decimated files. Even if the app loads only a fraction of the points, the entire file must still be read. Reading a very large LAZ file can take a long time, which is inefficient when loading only 0.5% of the point cloud. Working with pre-decimated files makes this step feel much faster.
 
 ### Ground Filtering
 
@@ -98,10 +113,7 @@ Since all the cursors are *not recommended to change*, the "Point cloud" tab gen
 4. Build a Canopy Height Model.
 5. Smooth the Canopy Height Model.
 
-The result is then rendered in 3D. The rendering is based on WebGL, a technology for interactive 3D scenes in a web page, which has display limitations. To maintain fluid performance, the rendering is limited to 2 million points.
-
-Most of the computation time comes from reading large LAZ files. To make the workflow more efficient, we recommend pre-decimating the point cloud and saving smaller files that are faster to read.
-
+The result is then rendered in 3D. The rendering is based on WebGL, a technology for interactive 3D scenes in a web page, which has display limitations. To maintain fluid performance, the rendering is limited to 2 million points. For a better rendering, using an external software is recommanded.
 
 ## Panel 3: CHM
 
@@ -109,12 +121,15 @@ Most of the computation time comes from reading large LAZ files. To make the wor
 
 The CHM tab allows fine control over CHM smoothing and also provides a way to visualize the DTM. The smoothed CHM has already been produced in the previous step, so there is nothing to do unless the default smoothed CHM shows clear issues. The final smoothed CHM should preserve all tree apexes without losing accuracy from over-smoothing, while still reducing irrelevant variations.
 
-The defaults are effective. **It is not recommended to change the settings.** However, if the defaults are not satisfactory, the panel offers options to visualize, check, and recompute. Otherwise, the user can proceed to page 4.
+The defaults are effective. **It is not recommended to change the settings.** However, if the defaults are not satisfactory, the panel offers options to visualize, check, and recompute. Otherwise, the user can proceed to page 4 without intervention.
 
+This tab also enable to visualize the DTM to check for potential issues.
 
 ## Panel 4: Tree Layout
 
-From the Excel database, the app produces a map of the blocks and a map of the trees. This shows the theoretical position of every single tree. To build an accurate map, the routines need to know the block sizes, the number of trees per block (e.g., 6 means 6 × 6 = 36), and the ordering of the trees within each block. This is controlled by the input fields provided on this page. All this information is expected to be known by the user and is usually recorded somewhere in the database, often in a format that is not computer-readable.
+![](page4.png){width=100%}
+
+From the Excel database, the app produces a map of the blocks and a map of the trees. This pages shows the theoretical position of every single tree. To build an accurate map, the routines need to know the block sizes (default 18.6x18.6 m), the number of trees per block (default 6x6), and the ordering of the trees within each block. This is controlled by the input fields provided on this page. All this information is expected to be known by the user and is usually recorded somewhere in the database, often in a format that is not computer-readable thus requiring operator intervention to set up the configuration.
 
 Once the layout matches reality, the user can proceed to the next page.
 
@@ -125,17 +140,17 @@ Note the red point in the figure. This is the **Tree Zero** (Block 1, Tree 1), w
 
 ![](page5.png){width=100%}
 
-This is **the most important** pane of the app and the only one that requires deep user intervention. The goal is to align the theoretical tree map built from the database with the real trees, in order to automatically pair database entries with measured trees. If a theoretical tree falls between two real trees, there is a chance that an incorrect pairing occurs, assigning the correct measurement to the wrong tree. The theoretical map **does NOT need to be perfect**. Perfection is achieved through post-optimization, but it should at least be accurate enough to ensure that each theoretical tree lies within the crown of a real tree.
+This is **the most important** pane of the app and the only one that requires deep user intervention. The goal is to align the theoretical tree map built from the database with the real trees, in order to automatically pair database entries with measured trees. If a theoretical tree falls between two real trees, there is a chance that an incorrect pairing occurs, assigning the correct measurement to the wrong tree. The theoretical map **does NOT need to be perfect**. Perfection is achieved through post-optimization, but it should at least be accurate enough to ensure that each theoretical tree lies approximately within the crown of its real tree.
 
-The app does not locate trees automatically. This approach would be prone to errors, and in the context of the plantation, we cannot afford a single mistake. Instead of automatically detecting trees, the app uses the theoretical layout as a reference and attempts to find and measure the corresponding trees in the Canopy Height Model from the theoretical seed, guaranteeing that each database tree is associated with a real tree.
+The app does not locate trees automatically. This approach would be prone to few errors, and in the context of the plantation, we cannot afford a single mistake. Instead of automatically detecting trees, the app uses the theoretical layout as a reference and attempts to find and measure the corresponding trees in the Canopy Height Model from the theoretical seed, guaranteeing that each database tree is associated with a real tree.
 
-For this process to work, the theoretical map must be very well aligned with the real trees. If a theoretical tree falls between two real trees, there is a risk of assigning the wrong measurement to the database tree. Therefore, this panel provides tools for semi-automatic alignment.
+For this process to work, the theoretical map must be very well aligned with the real trees. If a theoretical tree falls between two real trees, there is a risk of assigning the wrong measurement to the database. Therefore, this panel provides tools for automatic and semi-automatic alignment.
 
 ### Tree Zero
 
-By default, the plantation layout has no geographic information and is not aligned with real data. It is oriented to the north. To align the layout, three parameters are required: x and y translations, and a rotation angle.
+By default, the plantation layout has no geographic information and is not aligned with real data. It is oriented to the north (this is not alway true but we will discover that later). To align the layout, three parameters are required: x and y translations, and a rotation angle.
 
-To align the layout automatically, the user can click the so-called Tree Zero on the map, using the CHM to visually locate it. This provides the x and y translations needed to align the reference tree. Then, by clicking the `Align trees` button, the rotation angle is computed automatically, and the x-y translations are slightly optimized to maximize alignment (see figure below)
+To align the layout automatically, the user can click the so-called **Tree Zero** (see previous section) on the map, using the CHM to visually locate it. This provides the x and y translations needed to align the reference tree. Then, by clicking the `Align trees` button, the rotation angle is computed automatically, and the x-y translations are slightly optimized to maximize alignment (see figure below)
 
 ![](lmalignment.png){width=100%}
 

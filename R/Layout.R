@@ -60,13 +60,37 @@ RPBCLayout <- R6::R6Class("Plantation",
       }
       else if (ext %in% c("shp", "gpkg"))
       {
-        layout = sf::st_read(file, quiet = TRUE)
+        blocks = NULL
+        if (ext == "shp")
+        {
+          layout = sf::st_read(file, quiet = TRUE)
+        }
 
+        if (ext == "gpkg")
+        {
+          layer = sf::st_layers(file)
+          names = layer$name
+
+          if (!"trees" %in% names)
+            stop("When loading a plantation layout from an external GeoPackage it must have a layer named 'trees'. Use the file 'plan_layout.gpkg' produced by the application.")
+
+          if (!"trees" %in% names)
+            stop("When loading a plantation layout from an external GeoPackage it must have a layer named 'block'. Use the file 'plan_layout.gpkg' produced by the application.")
+
+          layout = sf::st_read(file, layer = "trees", quiet = TRUE)
+          blocks = sf::st_read(file, layer = "block", quiet = TRUE)
+        }
         assert_sf_point(layout)
 
         if (any(!c(TPOSNAME, BLOCKNAME) %in% names(layout)))
           stop(paste0("The tree layout must have attributes named '", TPOSNAME, "' '", BLOCKNAME, "'"))
 
+        if (!is.null(blocks))
+        {
+          blockname = df_find_column(blocks, c("BlockID", BLOCKNAME), mustWork = FALSE)
+          if (is.null(blockname))
+            stop(paste0("The block layout must have an attribute named '", BLOCKNAME, "' or 'BlockID'"))
+        }
 
         # Estimate spacing
         d = sf::st_coordinates(layout)
@@ -75,7 +99,14 @@ RPBCLayout <- R6::R6Class("Plantation",
         self$spacing = stats::median(d)
 
         self$tree_layout_oriented = layout[, c(TPOSNAME, BLOCKNAME)]
-        self$block_layout_raw = self$tree_layout_oriented
+        self$tree_layout_raw = self$tree_layout_oriented
+
+        if (!is.null(blocks))
+        {
+          self$block_layout_raw = blocks[, c(blockname)]
+          self$block_layout_oriented = self$block_layout_raw
+        }
+
         self$from_geodatabase = TRUE
       }
       else

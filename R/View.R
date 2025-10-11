@@ -261,7 +261,7 @@ PlantationView <- R6::R6Class("PlantationView",
         ) +
         ggplot2::labs(
           title = "Crown Area Distribution",
-          x = "Area (m²)",
+          x = "Area (m\u00B2)",
           y = "Count"
         ) +
         ggplot2::theme_bw()

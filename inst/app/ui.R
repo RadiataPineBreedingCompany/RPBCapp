@@ -78,33 +78,15 @@ ui <- page_navbar(
             icon = bsicons::bs_icon("cast")
           ),
           tooltiped("2. Select a point cloud or a canopy height model. ", "The application can work with a Canopy Height Model only. The point cloud is not mandatory. The point cloud can be used to build the CHM."),
-          fluidRow(
-            column(
-              width = 5,
-              shinyFiles::shinyFilesButton(
-                'loadLasFileButton', 'Select point cloud file', 'Please select a point cloud',
-                FALSE,
-                viewtype = "icon",
-                icon = icon("cloud"),
-                class = "w-100"
-              )
-            ),
-            column(
-              width = 2,
-              div(style = "text-align: center; line-height: 38px;", strong("or"))
-            ),
-            column(
-              width = 5,
-              shinyFiles::shinyFilesButton(
-                'loadCHMFileButton', 'Select CHM file', 'Please select a config file',
-                FALSE,
-                viewtype = "icon",
-                icon = bsicons::bs_icon("grid-3x3"),
-                class = "w-100"
-              )
-            )
-          ),
-          tooltiped("3. Select a database file ", "Select an Excel file containing the plantation database."),
+          shinyFiles::shinyFilesButton(
+            'loadLasFileButton', 'Select point cloud file', 'Please select a point cloud',
+            FALSE,
+            viewtype = "icon",
+            icon = icon("cloud"),
+            class = "w-100"
+          )
+        ),
+        tooltiped("3. Select a database file ", "Select an Excel file containing the plantation database."),
           shinyFiles::shinyFilesButton(
             'loadBlockPatternFileButton', 'Select Excel file', 'Please select an Excel file',
             FALSE,

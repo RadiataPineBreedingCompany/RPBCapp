@@ -526,7 +526,7 @@ public = list(
         {
           self$set_layout_parameter(
             block_size = unlist(config$layout$block_size),
-            num_trees = config$layout$num_trees,
+            num_trees = unlist(config$layout$num_trees),
             start = config$layout$start,
             orientation = config$layout$orientation)
         }
