@@ -1,5 +1,3 @@
-# console and shiny progress bar interface
-#' @export
 make_progress <- function(progress, iterations)
 {
   if (is.null(progress)) {

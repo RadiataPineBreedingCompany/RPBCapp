@@ -1,7 +1,7 @@
 Package: RPBCapp
 Type: Package
 Title: Tree Measurement In Radiata Pine Plantation App
-Version: 0.1.0
+Version: 1.0.0
 Authors@R: c(
     person(
       "Jean-Romain", "Roussel",
@@ -11,9 +11,14 @@ Authors@R: c(
   )
 Description: Shiny app for individual tree measurement in RPBC's radiata pine plantation.
 Depends: 
-  R (>= 4.1.0)
+  R (>= 4.1.0),
+  shiny,
+  bslib
 Imports: 
   lidR (>= 4.2.2),
+  bsicons,
+  shinyFiles,
+  DT,
   data.table,
   tools,
   terra,
@@ -24,11 +29,12 @@ Imports:
   leafem,
   leafpop,
   jsonlite,
-  bslib,
   readxl,
   sf,
-  shiny,
-  viridis
+  viridis,
+  ggplot2,
+  geojsonsf,
+  fs
 Suggests:
     knitr,
     rgl,
@@ -45,6 +51,8 @@ Collate:
     'Controller.R'
     'alignment.R'
     'app.R'
+    'app_server.R'
+    'app_ui.R'
     'globals.R'
     'leaflet.R'
     'progress.R'

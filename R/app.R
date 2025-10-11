@@ -1,5 +1,9 @@
+#' Run shiny application
+#' @import shiny
+#' @import bslib
 #' @export
-run_myapp <- function() {
-  app_dir <- system.file("app", package = "RPBCapp")
-  shiny::runApp(app_dir, display.mode = "normal", launch.browser=TRUE)
+run_app <- function()
+{
+  shiny::addResourcePath("www", system.file("app/www/", package = "RPBCapp"))
+  shiny::shinyApp(ui = ui, server = server)
 }

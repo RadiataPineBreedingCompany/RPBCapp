@@ -1,6 +1,6 @@
 # ---- base map ----
 
-#' @export
+
 make_base_map <- function(groups = c())
 {
   leaflet::leaflet() |>
@@ -69,7 +69,7 @@ make_base_map <- function(groups = c())
 
 # ---- specific layers ----
 
-#' @export
+
 add_dtm_layer <- function(map, dtm, proxy = FALSE) {
   hillshade_fn <- function(dtm) {
     dtm_prod <- terra::terrain(dtm, v = c("slope", "aspect"), unit = "radians")
@@ -87,7 +87,7 @@ add_dtm_layer <- function(map, dtm, proxy = FALSE) {
   )
 }
 
-#' @export
+
 add_schm_layer <- function(map, schm, proxy = FALSE) {
   .add_raster_layer(
     map = map,
@@ -98,7 +98,7 @@ add_schm_layer <- function(map, schm, proxy = FALSE) {
   )
 }
 
-#' @export
+
 add_chm_layer <- function(map, chm, proxy = FALSE) {
   .add_raster_layer(
     map = map,
@@ -110,7 +110,7 @@ add_chm_layer <- function(map, chm, proxy = FALSE) {
 }
 
 # ---- vector layers ----
-#' @export
+
 add_bbox_layer <- function(map, bbox, proxy = FALSE)
 {
   if (is.null(bbox)) return(list(map = map, groups = NULL))
@@ -120,7 +120,7 @@ add_bbox_layer <- function(map, bbox, proxy = FALSE)
   list(map = map, groups = "Bounding box")
 }
 
-#' @export
+
 add_boundaries_layer <- function(map, boundaries, proxy = FALSE)
 {
   if (is.null(boundaries)) return(list(map = map, groups = NULL))
@@ -130,7 +130,7 @@ add_boundaries_layer <- function(map, boundaries, proxy = FALSE)
   list(map = map, groups = "Boundaries")
 }
 
-#' @export
+
 add_block_layout_layer <- function(map, layout, proxy = FALSE)
 {
   if (is.null(layout) || is.null(layout$block_layout_oriented)) return(list(map = map, groups = NULL))
@@ -142,7 +142,7 @@ add_block_layout_layer <- function(map, layout, proxy = FALSE)
   list(map = map, groups = "Block layout")
 }
 
-#' @export
+
 add_warnings_layer <- function(map, layout_warnings, proxy = FALSE)
 {
   if (is.null(layout_warnings)) return(list(map = map, groups = NULL))
@@ -198,7 +198,7 @@ add_warnings_layer <- function(map, layout_warnings, proxy = FALSE)
   if (length(added) == 0) list(map = map, groups = NULL) else list(map = map, groups = added)
 }
 
-#' @export
+
 add_crowns_layer <- function(map, crowns, proxy = FALSE)
 {
   if (is.null(crowns)) return(list(map = map, groups = NULL))
@@ -210,7 +210,7 @@ add_crowns_layer <- function(map, crowns, proxy = FALSE)
   list(map = map, groups = "Crowns")
 }
 
-#' @export
+
 add_tree_layout_layer <- function(map, layout, proxy = FALSE)
 {
   if (is.null(layout)) return(list(map = map, groups = NULL))
@@ -247,7 +247,7 @@ add_tree_layout_layer <- function(map, layout, proxy = FALSE)
   list(map = map, groups = "Tree layout")
 }
 
-#' @export
+
 add_trees_layer <- function(map, trees, proxy = FALSE) {
   if (is.null(trees)) return(list(map = map, groups = NULL))
   data <- sf::st_transform(trees, 4326)
@@ -269,7 +269,7 @@ add_trees_layer <- function(map, trees, proxy = FALSE) {
   list(map = map, groups = "Trees")
 }
 
-#' @export
+
 center_on_object <- function(map, sfobj)
 {
   if (is.null(sfobj)) return(map)
@@ -289,7 +289,7 @@ center_on_object <- function(map, sfobj)
 
 # ==== Clear ====
 
-#' @export
+
 clear_group = function(map, group)
 {
   map <- map |> leaflet::clearGroup(group)

@@ -1,4 +1,3 @@
-#' @export
 RPBCLayout <- R6::R6Class("Plantation",
   public = list(
     block_layout_table = NULL,
@@ -243,7 +242,6 @@ rotate_sf <- function(x, theta, center = c(0,0))
   sf::st_set_geometry(x, rotated)
 }
 
-#' @export
 generate_blocks <- function(block_layout, block_size)
 {
   block_size_x = block_size[1]
@@ -279,8 +277,6 @@ generate_blocks <- function(block_layout, block_size)
   all_blocks
 }
 
-
-#' @export
 generate_trees <- function(block_layout, block_size, num_trees, start, orientation)
 {
   block_size_x = block_size[1]

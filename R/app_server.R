@@ -1,8 +1,3 @@
-library(shiny)
-library(RPBCapp)
-
-cat("Loading Server...\n")
-
 popup_error = function(msg)
 {
   showModal(
@@ -221,16 +216,16 @@ server <- function(input, output, session)
 
     if (!is.null(file) && length(file) > 0)
     {
-      show_notification("Creation of a project")
+      show_notification("Creating a project")
 
       safe_run({
         plantation$reset()
         plantation$create_config(file)
       })
 
-      update_file_table(runif(1))
-      update_state_table(runif(1))
-      update_stats_ui(runif(1))
+      update_file_table(stats::runif(1))
+      update_state_table(stats::runif(1))
+      update_stats_ui(stats::runif(1))
 
       output$mapTreeLayout <- leaflet::renderLeaflet({
         make_base_map(c("CHM", "sCHM", "Boundaries", "Block layout", "Move", "Warnings", "Tree layout")) |>
@@ -264,7 +259,7 @@ server <- function(input, output, session)
     if (is.null(file) || (length(file) == 0))
       return(NULL)
 
-    show_notification("Loading project")
+    show_notification("Loading the project")
 
     safe_run({
       plantation$reset()
@@ -310,20 +305,20 @@ server <- function(input, output, session)
 
       cat("Trigger UI update\n")
 
-      update_file_table(runif(1))
-      update_state_table(runif(1))
-      update_stats_ui(runif(1))
+      update_file_table(stats::runif(1))
+      update_state_table(stats::runif(1))
+      update_stats_ui(stats::runif(1))
 
-      update_bbox_in_maps(runif(1))
-      update_bound_in_maps(runif(1))
-      update_layout_in_maps(runif(1))
-      update_chm_in_maps(runif(1))
-      update_schm_in_maps(runif(1))
-      update_dtm_in_maps(runif(1))
-      update_trees_in_maps(runif(1))
-      update_debug_in_maps(runif(1))
+      update_bbox_in_maps(stats::runif(1))
+      update_bound_in_maps(stats::runif(1))
+      update_layout_in_maps(stats::runif(1))
+      update_chm_in_maps(stats::runif(1))
+      update_schm_in_maps(stats::runif(1))
+      update_dtm_in_maps(stats::runif(1))
+      update_trees_in_maps(stats::runif(1))
+      update_debug_in_maps(stats::runif(1))
 
-      update_rgl_view(runif(1))
+      update_rgl_view(stats::runif(1))
 
       cat("Project loaded\n")
     }, catch_warnings = TRUE)
@@ -363,11 +358,11 @@ server <- function(input, output, session)
       else
       {
         plantation$save()
-        update_bbox_in_maps(runif(1))
+        update_bbox_in_maps(stats::runif(1))
       }
 
-      update_state_table(runif(1))
-      update_file_table(runif(1))
+      update_state_table(stats::runif(1))
+      update_file_table(stats::runif(1))
     })
   }, ignoreInit = TRUE)
 
@@ -391,11 +386,11 @@ server <- function(input, output, session)
         input$partternOrientationChoiceRadioButton)
       plantation$save()
 
-      update_bound_in_maps(runif(1))
-      update_layout_in_maps(runif(1))
-      update_file_table(runif(1))
-      update_state_table(runif(1))
-      update_layout_plot(runif(1))
+      update_bound_in_maps(stats::runif(1))
+      update_layout_in_maps(stats::runif(1))
+      update_file_table(stats::runif(1))
+      update_state_table(stats::runif(1))
+      update_layout_plot(stats::runif(1))
     }, catch_warnings = TRUE)
   }, ignoreInit = TRUE)
 
@@ -407,14 +402,14 @@ server <- function(input, output, session)
     if (is.null(file) || length(file) == 0)
       return(NULL)
 
-    show_notification("Loading boundaries polygon")
+    show_notification("Loading boundary polygon")
 
     safe_run({
       plantation$set_boundaries(file)
       plantation$save()
-      update_bound_in_maps(runif(1))
-      update_file_table(runif(1))
-      update_state_table(runif(1))
+      update_bound_in_maps(stats::runif(1))
+      update_file_table(stats::runif(1))
+      update_state_table(stats::runif(1))
     })
   })
 
@@ -432,9 +427,9 @@ server <- function(input, output, session)
     safe_run({
       plantation$set_chm(file)
       plantation$save()
-      update_chm_in_maps(runif(1))
-      update_file_table(runif(1))
-      update_state_table(runif(1))
+      update_chm_in_maps(stats::runif(1))
+      update_file_table(stats::runif(1))
+      update_state_table(stats::runif(1))
     })
   })
 
@@ -447,14 +442,14 @@ server <- function(input, output, session)
     if (is.null(file) || length(file) == 0)
       return(NULL)
 
-    show_notification("Loading tree plantation design")
+    show_notification("Loading tree plantation layout")
 
     safe_run({
       plantation$set_layout(file)
       plantation$save()
-      update_file_table(runif(1))
-      update_state_table(runif(1))
-      update_layout_in_maps(runif(1))
+      update_file_table(stats::runif(1))
+      update_state_table(stats::runif(1))
+      update_layout_in_maps(stats::runif(1))
     })
   })
 
@@ -466,8 +461,8 @@ server <- function(input, output, session)
       show_notification("Smoothing CHM")
       plantation$smooth_chm(input$smoothCHM, input$smoothPasses)
       plantation$save()
-      update_schm_in_maps(runif(1))
-      update_file_table(runif(1))
+      update_schm_in_maps(stats::runif(1))
+      update_file_table(stats::runif(1))
     })
   })
 
@@ -477,14 +472,14 @@ server <- function(input, output, session)
 
   observeEvent(input$optimBlockButton, {
 
-    show_notification("Optim layout by block")
+    show_notification("Optimize layout by block")
 
     safe_run({
       withProgress(message = 'Tree detection', value = 0, {
         plantation$optim_layout(incProgress)
         plantation$save()
       })
-      update_layout_in_maps(runif(1))
+      update_layout_in_maps(stats::runif(1))
     })
   }, ignoreInit = TRUE)
 
@@ -500,8 +495,8 @@ server <- function(input, output, session)
         plantation$align_layout_lm(incProgress)
         plantation$save()
       })
-      update_layout_in_maps(runif(1))
-      update_state_table(runif(1))
+      update_layout_in_maps(stats::runif(1))
+      update_state_table(stats::runif(1))
     })
   }, ignoreInit = TRUE)
 
@@ -521,8 +516,8 @@ server <- function(input, output, session)
         plantation$adjust_layout(hmin, progress = incProgress)
         plantation$save()
       })
-      update_layout_in_maps(runif(1))
-      update_debug_in_maps(runif(1))
+      update_layout_in_maps(stats::runif(1))
+      update_debug_in_maps(stats::runif(1))
     })
   }, ignoreInit = TRUE)
 
@@ -541,17 +536,17 @@ server <- function(input, output, session)
 
     safe_run({
       if (!plantation$model$is_adjusted())
-        stop("Tree location not found yet. Please run tree localisation first (tab 4)")
+        stop("Tree localisation not found yet. Please run tree localisation first (tab 4)")
 
       withProgress(message = 'Tree measurement', value = 0, {
         plantation$measure_trees(hmin, progress = incProgress)
         plantation$save()
       })
 
-      update_file_table(runif(1))
-      update_trees_in_maps(runif(1))
-      update_state_table(runif(1))
-      update_stats_ui(runif(1))
+      update_file_table(stats::runif(1))
+      update_trees_in_maps(stats::runif(1))
+      update_state_table(stats::runif(1))
+      update_stats_ui(stats::runif(1))
     })
   }, ignoreInit = TRUE)
 
@@ -589,7 +584,7 @@ server <- function(input, output, session)
 
       plantation$save()
 
-      update_layout_in_maps(runif(1))
+      update_layout_in_maps(stats::runif(1))
     })
   })
 
@@ -612,14 +607,14 @@ server <- function(input, output, session)
           progress = incProgress)
         plantation$save()
 
-        update_dtm_in_maps(runif(1))
-        update_chm_in_maps(runif(1))
-        update_schm_in_maps(runif(1))
-        update_rgl_view(runif(1))
+        update_dtm_in_maps(stats::runif(1))
+        update_chm_in_maps(stats::runif(1))
+        update_schm_in_maps(stats::runif(1))
+        update_rgl_view(stats::runif(1))
       })
     })
 
-    update_file_table(runif(1))
+    update_file_table(stats::runif(1))
   })
 
   # ===== OnChange Parttern Choice Radio Button ====
@@ -633,7 +628,7 @@ server <- function(input, output, session)
       input$partternOrientationChoiceRadioButton,
       input$partternStartChoiceRadioButton)
 
-    oldpar <- par(mar = c(2, 2, 1, 1))
+    oldpar <- graphics::par(mar = c(2, 2, 1, 1))
     plot(coords$x, coords$y,
          asp = 1,
          type = "b",
@@ -644,8 +639,8 @@ server <- function(input, output, session)
          bty = "n"             # no box around plot
     )
 
-    text(coords$x+0.01, coords$y+0.01, labels = seq_len(nrow(coords)), cex = 0.6, col = "blue")
-    par(oldpar)  # reset margins to previous values
+    graphics::text(coords$x+0.01, coords$y+0.01, labels = seq_len(nrow(coords)), cex = 0.6, col = "blue")
+    graphics::par(oldpar)  # reset margins to previous values
   })
 
   # ===== OnChange any tree pattern inputs ====
@@ -675,10 +670,10 @@ server <- function(input, output, session)
 
         plantation$save()
 
-        clear_trees_in_maps(runif(1))
-        clear_debug_in_maps(runif(1))
-        update_layout_plot(runif(1))
-        update_layout_in_maps(runif(1))
+        clear_trees_in_maps(stats::runif(1))
+        clear_debug_in_maps(stats::runif(1))
+        update_layout_plot(stats::runif(1))
+        update_layout_in_maps(stats::runif(1))
       })
     },
     ignoreInit = TRUE
@@ -693,7 +688,7 @@ server <- function(input, output, session)
       plantation$set_crs(sf::st_crs(input$choose_crs))
       plantation$save()
       removeModal()
-      update_bbox_in_maps(runif(1))
+      update_bbox_in_maps(stats::runif(1))
     })
   })
 
@@ -702,7 +697,7 @@ server <- function(input, output, session)
   observe({
     val <- saveProject()
     if (val == 0) return(NULL)
-    safe({ plantation$save() })
+    safe_run({ plantation$save() })
   })
 
 
@@ -711,18 +706,18 @@ server <- function(input, output, session)
   observeEvent(input$reload, {
     show_notification("Refreshing app")
 
-    update_file_table(runif(1))
-    update_state_table(runif(1))
+    update_file_table(stats::runif(1))
+    update_state_table(stats::runif(1))
 
-    update_dtm_in_maps(runif(1))
-    update_chm_in_maps(runif(1))
-    update_schm_in_maps(runif(1))
-    update_layout_in_maps(runif(1))
-    update_trees_in_maps(runif(1))
+    update_dtm_in_maps(stats::runif(1))
+    update_chm_in_maps(stats::runif(1))
+    update_schm_in_maps(stats::runif(1))
+    update_layout_in_maps(stats::runif(1))
+    update_trees_in_maps(stats::runif(1))
 
-    update_rgl_view(runif(1))
+    update_rgl_view(stats::runif(1))
 
-    update_stats_ui(runif(1))
+    update_stats_ui(stats::runif(1))
   })
 
 
@@ -740,7 +735,7 @@ server <- function(input, output, session)
 
     if (!plantation$has_layout())
     {
-      popup_error("Clicked but no block layout was loaded yet")
+      popup_error("Clicked but no block layout loaded yet")
       return(NULL)
     }
 
@@ -838,7 +833,7 @@ server <- function(input, output, session)
     update_file_table()
     files_df = plantation$get_file_table()
     files_df$Path = short_path(files_df$Path, 50)
-    files_df = na.omit(files_df)
+    files_df = stats::na.omit(files_df)
     DT::datatable(
       files_df,
       selection = "single",
@@ -979,7 +974,7 @@ server <- function(input, output, session)
 
     output$vb_non_measured <- shiny::renderUI({
       value_box(
-        title = "Non-measured Trees",
+        title = "Unmeasured Trees",
         value = paste0(stats$non_measured$n, " (", stats$non_measured$p, "%)"),
         theme_color = "danger"
       )

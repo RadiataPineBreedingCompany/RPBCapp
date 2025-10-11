@@ -1,4 +1,3 @@
-#' @export
 layout_alignment_lm = function(layout, chm, pivot, ws, boundaries, progress = NULL)
 {
   prog <- make_progress(progress, 4)
@@ -119,8 +118,6 @@ layout_alignment_lm = function(layout, chm, pivot, ws, boundaries, progress = NU
   return(M)
 }
 
-
-#' @export
 layout_alignment_svd <- function(local_points, global_points)
 {
   if (!is.matrix(local_points) || !is.matrix(global_points))
@@ -178,7 +175,6 @@ layout_alignment_svd <- function(local_points, global_points)
   return(transformation_matrix)
 }
 
-#' @export
 layout_optimize_by_block = function(layout, blocks, chm, ws, boundaries, progress = NULL)
 {
   ws = min(ws)

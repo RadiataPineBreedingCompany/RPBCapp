@@ -1,10 +1,8 @@
 ---
 title: "Tutorial"
 output:
-  html_document:
-    self_contained: true
-    toc: true 
-    toc_depth: 3
+  html_document: 
+    toc: true
     toc_float: true
 ---
 
@@ -176,6 +174,8 @@ Block optimization can be performed afterward, but it is also possible to manual
 ### Edit in ArcGIS
 
 If the real plantation is significantly different from the theoretical layout, it may be impossible to align the theoretical map with the real trees, making it impossible to assign the correct measurements to the correct trees. In this case, each tree must be manually located. While this could be done in the app's edit mode, performing extensive edits on an HTML page is cumbersome. Instead, the map can be edited in any GIS software and then reloaded using the `Select file` button.
+
+All the files produced by the app can be found alongside the project file in the `output` directory. The plantation layout is `plan_layout.gpkg`.
 
 ### Adjustment
 

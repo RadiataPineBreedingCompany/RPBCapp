@@ -1,5 +1,5 @@
-#' @export
-PlantationView <- R6::R6Class("PlantationView",
+#' @importFrom R6 R6Class
+PlantationView <- R6Class("PlantationView",
   public = list(
     model = NULL,
 

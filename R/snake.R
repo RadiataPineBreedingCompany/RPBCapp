@@ -91,7 +91,7 @@ snake_pattern <- function(nx, ny, orientation = c("h", "v"), start = c("tl", "tr
 #' coords <- generate_snake_coords(4, 1, 10, 10, 2, 2, "h", "tl")
 #' plot(coords$x, coords$y, asp = 1, type = "b", main = "Snake Pattern")
 #' text(coords$x, coords$y, labels = seq_len(nrow(coords)), pos = 3, cex = 0.8, col = "blue")
-#' @export
+#' @noRd
 generate_snake_coords <- function(nx, ny = nx, cx, cy, spacing_x, spacing_y, orientation = c("h", "v"), start = c("tl", "tr", "bl", "br"))
 {
   orientation <- match.arg(orientation)

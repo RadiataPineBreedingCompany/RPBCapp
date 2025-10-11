@@ -1,7 +1,3 @@
-library(shiny)
-
-cat("Loading UI...\n")
-
 tooltiped <- function(text, tooltip_text)
 {
   tags$p(
@@ -27,116 +23,38 @@ link_rlidar <- tags$a(
 
 link_vignette <- tags$a(
   shiny::icon("book"), "Documentation",
-  href = "Tutorial.html",
+  href = "www/Tutorial.html",
   target = "_blank"
 )
 
 
 # ---- UI ----
 
-addResourcePath("www", system.file("app/www/", package = "RPBCapp"))
-
 ui <- page_navbar(
   window_title = "RBPC plantation measurement",
-  title = tagList(
-    tags$img(src = "www/logo.png", height = "50px"),
+  title = tagList(tags$img(src = "www/logo.png", height = "50px"),
   ),
-  theme = bs_theme(version = 5, , bootswatch = "flatly"),
+  theme = bs_theme(version = 5, bootswatch = "flatly"),
   navbar_options = navbar_options(bg = "#0062cc", underline = TRUE),
 
-  tags$script(HTML("
-    document.addEventListener('keydown', function(e) {
-      // Example: Ctrl+K
-      if (e.ctrlKey && e.key === 'k') {
-        e.preventDefault(); // Prevent default browser action
-        Shiny.setInputValue('reload', new Date().getTime());
-      }
-    });
-  ")),
-
-  tags$style(HTML("
-  .irs { font-size: 11px; }              /* smaller slider font */
-  .form-group { margin-bottom: 6px; }   /* tighter spacing */
-  .control-label { margin-bottom: 2px; font-size: 12px; }
-")),
-
+  header = tagList(
+    tags$script(HTML("
+      document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.key === 'k') {
+          e.preventDefault();
+          Shiny.setInputValue('reload', new Date().getTime());
+        }
+      });
+    ")),
+    tags$style(HTML("
+      .irs { font-size: 11px; }
+      .form-group { margin-bottom: 6px; }
+      .control-label { margin-bottom: 2px; font-size: 12px; }
+    "))
+  ),
 
   # ---- nav 1 project ----
-  nav_panel(
-    title = "1. Project",
-    layout_columns(
-      col_widths = c(4, 8), # two equal columns for cards
-      card(
-        full_screen = FALSE,
-        card_header("New project"),
-        card_body(
-          tooltiped("1. Create a project", "To work the application needs an initialized project. "),
-          shinyFiles::shinySaveButton(
-            'createProjectButton', 'Create a project', 'Create a RPBC project as...',
-            filetype = "rpbc",
-            viewtype = "icon",
-            icon = bsicons::bs_icon("cast")
-          ),
-          tooltiped("2. Select a point cloud or a canopy height model. ", "The application can work with a Canopy Height Model only. The point cloud is not mandatory. The point cloud can be used to build the CHM."),
-          shinyFiles::shinyFilesButton(
-            'loadLasFileButton', 'Select point cloud file', 'Please select a point cloud',
-            FALSE,
-            viewtype = "icon",
-            icon = icon("cloud"),
-            class = "w-100"
-          )
-        ),
-        tooltiped("3. Select a database file ", "Select an Excel file containing the plantation database."),
-          shinyFiles::shinyFilesButton(
-            'loadBlockPatternFileButton', 'Select Excel file', 'Please select an Excel file',
-            FALSE,
-            viewtype = "icon",
-            icon = icon("table")),
-          tooltiped("4. Select a boundary file ", "A geospatial file containing plantation boundaries."),
-          shinyFiles::shinyFilesButton(
-            'loadBoundaryFileButton', 'Select geospatial file', 'Please select a geospatial file',
-            FALSE,
-            viewtype = "icon",
-            icon = bsicons::bs_icon("bounding-box"))
-        )
-      ),
-      card(
-        full_screen = TRUE,
-        card_header("Map preview"),
-        div(
-          style = "width: 100%; height: 100%;",
-          leaflet::leafletOutput("mapPreview",width = "100%", height = "100%")
-        )
-      ),
 
-      card(
-        full_screen = FALSE,
-        card_header("Existing project"),
-        card_body(
-          tooltiped("Select an ‘.rpcb’ config file",  "The file will be read and the previous configuration restored."),
-          shinyFiles::shinyFilesButton('loadConfigFileButton', 'Select config file', 'Please select a config file', FALSE, icon = icon("gear")),
-        )
-      ),
-
-      layout_columns(
-        col_widths = c(8,4),
-        card(
-          full_screen = TRUE,
-          card_header("Project Data"),
-          card_body(
-            DT::DTOutput("fileTable")
-          )
-        ),
-        card(
-          full_screen = TRUE,
-          card_header("Project state"),
-          card_body(
-            DT::DTOutput("stateTable")
-          )
-        ),
-      )
-    )
-  ),
 
   # ---- nav 2 point cloud ----
   nav_panel(
@@ -148,7 +66,7 @@ ui <- page_navbar(
         wellPanel(
           tags$p(
             "Estimated density: ", textOutput("estimatedDensityValue", inline = TRUE),
-            "pts/m², Recommended fraction: ", textOutput("recommandedFractionValue", inline = TRUE),
+            "pts/m\u00B2, Recommended fraction: ", textOutput("recommandedFractionValue", inline = TRUE),
             sliderInput("keepRandomFraction", "Load fraction", min = 0.05, max = 1, value = 1, step = 0.05)
           )
         ),
@@ -158,7 +76,7 @@ ui <- page_navbar(
           sliderInput("cloth_resolution", "Cloth resolution", min = 0.1, max = 2, value = 0.5, step = 0.1)
         ),
         wellPanel(
-          tooltiped(tags$strong("CHM Parameters"), "Using the default parameters is recommanded"),
+          tooltiped(tags$strong("CHM Parameters"), "Using the default parameters is recommended"),
           sliderInput("res", "CHM resolution (m)", min = 0.02, max = 1, value = 0.1, step = 0.01)
         ),
         actionButton("processPointCloudButton", "Process"),
@@ -204,14 +122,14 @@ ui <- page_navbar(
             style = "display: flex; align-items: center; gap: 6px;",
             "Block size: ",
             numericInput("blockSizeInputX", NULL, value = 18.6, min = 5, max = 50, step = 0.1, width = "100px"),
-            tags$span("×"),
+            tags$span("\u00D7"),
             numericInput("blockSizeInputY", NULL, value = 18.6, min = 5, max = 50, step = 0.1, width = "100px")
           ),
           div(
             style = "display: flex; align-items: center; gap: 6px;",
             "Num. trees: ",
             numericInput("treeNumberInputX", NULL, value = 6, min = 1, max = 15, step = 1, width = "100px"),
-            tags$span("×"),
+            tags$span("\u00D7"),
             numericInput("treeNumberInputY", NULL, value = 6, min = 1, max = 15, step = 1, width = "100px")
           ),
           radioButtons(
@@ -250,13 +168,13 @@ ui <- page_navbar(
       sidebar = sidebar(
         width = 300,
         wellPanel(
-          tooltiped(tags$strong("Tree map"), "If an accurate map of the tree is available load it. Otherwise the map will be generated from the block layout built in step 3."),
-          shinyFiles::shinyFilesButton('loadTreeMapFileButton', 'Select file', 'Please select an geospatiale file', FALSE, icon = icon("table")),
+          tooltiped(tags$strong("Tree map"), "If an accurate map of the tree is available, load it. Otherwise the map will be generated from the block layout built in step 3."),
+          shinyFiles::shinyFilesButton('loadTreeMapFileButton', 'Select file', 'Please select a geospatial file', FALSE, icon = icon("table")),
         ),
         wellPanel(
-          tooltiped(tags$strong("Tree Zero"), "This tree will be use as pivot point to align the tree layout map real trees"),
+          tooltiped(tags$strong("Tree Zero"), "This tree will be used as pivot point to align the tree layout map real trees"),
           uiOutput("clickTreeZeroInfo"),
-          tooltiped("Run automatic alignment.", "Once the pivot point has been choosen accurately, this button trigger an alignment with real trees"),
+          tooltiped("Run automatic alignment.", "Once the pivot point has been chosen accurately, this button triggers an alignment with real trees"),
           actionButton("alignLayoutButton", "Align trees")
         ),
         wellPanel(

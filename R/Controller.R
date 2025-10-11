@@ -1,8 +1,8 @@
-#' @export
 #' @include Model.R
 #' @include View.R
 #' @include utils.R
-PlantationController <- R6::R6Class("PlantationController",
+#' @importFrom R6 R6Class
+PlantationController <- R6Class("PlantationController",
 public = list(
   model = NULL,
 

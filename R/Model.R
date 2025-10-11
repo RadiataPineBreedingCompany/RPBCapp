@@ -1,6 +1,6 @@
-#' @export
 #' @include Layout.R
-PlantationModel <- R6::R6Class("PlantationModel",
+#' @importFrom R6 R6Class
+PlantationModel <- R6Class("PlantationModel",
 public = list(
   las = NULL,             # LAS
   bbox = NULL,            # sf POLYGON

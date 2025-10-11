@@ -12,7 +12,6 @@ extract_with_buffer = function(raster, points, buffer)
   ans
 }
 
-#' @export
 relocate_trees = function(chm, echm, plan, spacing, hmin, progress = NULL)
 {
   .I <- Z <- ID <- NULL
@@ -108,7 +107,6 @@ relocate_trees = function(chm, echm, plan, spacing, hmin, progress = NULL)
   return(trees)
 }
 
-#' @export
 validate_tree = function(trees, plan, spacing)
 {
   ApexFound <- .N <- TREEID <- X <- Y <- NULL
@@ -170,7 +168,6 @@ validate_tree = function(trees, plan, spacing)
   #st_write(debug_lines, flinedebug, delete_dsn = TRUE)
 }
 
-#' @export
 measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, progress = NULL)
 {
   prog <- make_progress(progress, 3)
@@ -223,7 +220,8 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
 
   if (!use_dalponte)
   {
-    pcrown <- ForestTools::mcws(treetops = seeds, CHM = echm, minHeight = hmin, IDfield = "TREEID", format = "polygons")
+    stop("Unsupported options")
+    #pcrown <- ForestTools::mcws(treetops = seeds, CHM = echm, minHeight = hmin, IDfield = "TREEID", format = "polygons")
   }
 
   prog$tick(2, "Individual tree measurement")
