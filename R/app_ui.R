@@ -110,7 +110,7 @@ ui <- page_navbar(
         full_screen = FALSE,
         card_header("Existing project"),
         card_body(
-          tooltiped("Select an ‘.rpbc’ config file", "The file will be read and the previous configuration restored."),
+          tooltiped("Select an '.rpbc' config file", "The file will be read and the previous configuration restored."),
           shinyFiles::shinyFilesButton(
             'loadConfigFileButton', 'Select config file', 'Please select a config file',
             FALSE,
