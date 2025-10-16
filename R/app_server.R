@@ -479,6 +479,8 @@ server <- function(input, output, session)
         plantation$optim_layout(incProgress)
         plantation$save()
       })
+      clear_debug_in_maps(stats::runif(1))
+      clear_trees_in_maps(stats::runif(1))
       update_layout_in_maps(stats::runif(1))
     })
   }, ignoreInit = TRUE)
@@ -572,6 +574,8 @@ server <- function(input, output, session)
 
     show_notification("Map edited")
 
+    print(nrow(plantation$model$layout$tree_layout_oriented))
+
     safe_run({
       geojson <- jsonlite::toJSON(edits, auto_unbox = TRUE, digits = 8)
       edited  <- geojsonsf::geojson_sf(geojson)
@@ -584,8 +588,12 @@ server <- function(input, output, session)
 
       plantation$save()
 
+      clear_debug_in_maps(stats::runif(1))
+      clear_trees_in_maps(stats::runif(1))
       update_layout_in_maps(stats::runif(1))
     })
+
+    print(nrow(plantation$model$layout$tree_layout_oriented))
   })
 
   # ===== OnClick Process PointCloud Button ====

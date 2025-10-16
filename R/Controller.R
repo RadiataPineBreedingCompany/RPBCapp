@@ -250,6 +250,10 @@ public = list(
     geom[edited$layerId] <- sf::st_geometry(edited)
     sf::st_geometry(layout) <- geom
     self$model$layout$tree_layout_oriented <- layout
+    self$model$crowns = NULL
+    self$model$trees = NULL
+    self$model$layout$tree_layout_adjusted = NULL
+    self$model$layout_warnings <- NULL
 
     self$save_plan()
   },
@@ -275,6 +279,11 @@ public = list(
     new_layout = layout_optimize_by_block(layout, blocks, chm, ws, boundaries, progress = progress)
 
     self$model$layout$tree_layout_oriented = new_layout
+
+    self$model$crowns = NULL
+    self$model$trees = NULL
+    self$model$layout$tree_layout_adjusted = NULL
+    self$model$layout_warnings <- NULL
 
     self$save_plan()
     self$write_config()

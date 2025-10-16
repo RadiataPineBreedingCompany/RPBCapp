@@ -264,32 +264,37 @@ public = list(
   {
     cat("Set layout parameter\n")
 
+    is_geodatabase = self$layout$from_geodatabase
+
     required(self$layout, "No 'layout' object yet. Read and Excel file first")
     stopifnot(!anyNA(block_size), !is.na(num_trees), !is.na(start[1]), !is.na(orientation))
 
-    # Construction of the layout
-    self$layout$build_layout(block_size, num_trees, start = start, orientation = orientation)
-    self$layout$set_crs(self$crs)
-
-    # The layout is originally at (0,0). Find an arbitrary origin such as it is visible on the map.
-    if (self$layout$M[1,3] == 0 & self$layout$M[2,3] == 0)
+    if (!is_geodatabase)
     {
-      origin = c(0,0)
-      if (!is.null(self$boundaries)) {
-        bb = sf::st_bbox(self$boundaries)
-        origin = c(bb[1], bb[2])
-      } else if (!is.null(self$chm)) {
-        bb = sf::st_bbox(self$chm)
-        origin = c(bb[1], bb[2])
-      } else if (!is.null(self$dtm)) {
-        bb = sf::st_bbox(self$dtm)
-        origin = c(bb[1], bb[2])
-      } else if (!is.null(self$bbox)) {
-        bb = sf::st_bbox(self$bbox)
-        origin = c(bb[1], bb[2])
-      }
+      # Construction of the layout
+      self$layout$build_layout(block_size, num_trees, start = start, orientation = orientation)
+      self$layout$set_crs(self$crs)
 
-      self$layout$set_origin(origin[1], origin[2])
+      # The layout is originally at (0,0). Find an arbitrary origin such as it is visible on the map.
+      if (self$layout$M[1,3] == 0 & self$layout$M[2,3] == 0)
+      {
+        origin = c(0,0)
+        if (!is.null(self$boundaries)) {
+          bb = sf::st_bbox(self$boundaries)
+          origin = c(bb[1], bb[2])
+        } else if (!is.null(self$chm)) {
+          bb = sf::st_bbox(self$chm)
+          origin = c(bb[1], bb[2])
+        } else if (!is.null(self$dtm)) {
+          bb = sf::st_bbox(self$dtm)
+          origin = c(bb[1], bb[2])
+        } else if (!is.null(self$bbox)) {
+          bb = sf::st_bbox(self$bbox)
+          origin = c(bb[1], bb[2])
+        }
+
+        self$layout$set_origin(origin[1], origin[2])
+      }
     }
 
     # Combine the layout with the database that contains among other
@@ -299,35 +304,39 @@ public = list(
     # Maybe the tree layout contains a column Long Lat because the database has a long lat.
     # In this case this means that some trees have a position recorded.
     tlr = self$layout$tree_layout_raw
-    longname = df_find_column(tlr, LONGITUDECOLNAMES, mustWork = FALSE)
-    latname = df_find_column(tlr, LATITUDECOLNAMES, mustWork = FALSE)
-    has_position = !is.null(longname) & !is.null(latname)
 
-    # Yes we have a position for some trees. It means we can align the layout in local space
-    # centered on 0,0 into the real world coordinate system
-    if (has_position)
+    if (!is_geodatabase)
     {
-      message("Detection of long lat in the database")
+      longname = df_find_column(tlr, LONGITUDECOLNAMES, mustWork = FALSE)
+      latname = df_find_column(tlr, LATITUDECOLNAMES, mustWork = FALSE)
+      has_position = !is.null(longname) & !is.null(latname)
 
-      # Create a sf with long lat
-      long = tlr[[longname]]
-      lat = tlr[[latname]]
-      long = as.numeric(na.omit(long))
-      lat = as.numeric(na.omit(lat))
-      longlat = data.frame(long, lat)
-      longlat = sf::st_as_sf(longlat, coords = c("long", "lat"), crs = 4326)
+      # Yes we have a position for some trees. It means we can align the layout in local space
+      # centered on 0,0 into the real world coordinate system
+      if (has_position)
+      {
+        message("Detection of long lat in the database")
 
-      # Transform in current CRS
-      global = sf::st_transform(longlat, self$crs)
-      global = sf::st_coordinates(global)[,1:2]
+        # Create a sf with long lat
+        long = tlr[[longname]]
+        lat = tlr[[latname]]
+        long = as.numeric(na.omit(long))
+        lat = as.numeric(na.omit(lat))
+        longlat = data.frame(long, lat)
+        longlat = sf::st_as_sf(longlat, coords = c("long", "lat"), crs = 4326)
 
-      # Find the local coordinated of the corresponding trees
-      idx = which(!is.na(tlr[[longname]]))
-      local = sf::st_coordinates(tlr[idx,])[,1:2]
+        # Transform in current CRS
+        global = sf::st_transform(longlat, self$crs)
+        global = sf::st_coordinates(global)[,1:2]
 
-      # Align with SVD decomposition
-      M = layout_alignment_svd(local, global)
-      self$layout$set_matrix(M)
+        # Find the local coordinated of the corresponding trees
+        idx = which(!is.na(tlr[[longname]]))
+        local = sf::st_coordinates(tlr[idx,])[,1:2]
+
+        # Align with SVD decomposition
+        M = layout_alignment_svd(local, global)
+        self$layout$set_matrix(M)
+      }
     }
 
     # invalidate previous results

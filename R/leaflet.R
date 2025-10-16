@@ -135,7 +135,6 @@ add_block_layout_layer <- function(map, layout, proxy = FALSE)
 {
   if (is.null(layout) || is.null(layout$block_layout_oriented)) return(list(map = map, groups = NULL))
   data <- sf::st_transform(layout$block_layout_oriented, 4326)
-  data <- data[data$BlockID > 0, ]
   if (nrow(data) == 0) return(list(map = map, groups = NULL))
   if (proxy) map <- map |> leaflet::clearGroup("Block layout")
   map <- map |> leaflet::addPolygons(data = data, group = "Block layout", color = "black", fill = FALSE, weight = 3)
@@ -223,6 +222,7 @@ add_tree_layout_layer <- function(map, layout, proxy = FALSE)
     return(list(map = map, groups = NULL))
   }
 
+  data$layerID <- 1:nrow(data)
   data <- remove_cut_trees(data)
   if (nrow(data) == 0) return(list(map = map, groups = NULL))
 
@@ -243,7 +243,7 @@ add_tree_layout_layer <- function(map, layout, proxy = FALSE)
   }
 
   if (proxy) map <- map |> leaflet::clearGroup("Tree layout")
-  map <- map |> leaflet::addCircleMarkers(data = data, color = col, group = "Tree layout", radius = 1, layerId = 1:nrow(data))
+  map <- map |> leaflet::addCircleMarkers(data = data, color = col, group = "Tree layout", radius = 1, layerId = data$layerID)
   list(map = map, groups = "Tree layout")
 }
 
