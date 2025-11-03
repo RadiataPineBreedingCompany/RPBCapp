@@ -4,7 +4,10 @@
 \alias{run_app}
 \title{Run shiny application}
 \usage{
-run_app()
+run_app(browser = TRUE)
+}
+\arguments{
+\item{browser}{logical launch in browser}
 }
 \description{
 Run shiny application
