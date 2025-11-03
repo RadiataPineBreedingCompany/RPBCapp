@@ -25,6 +25,20 @@ The present document describes how to process a plantation using the Shiny app. 
 
 The processing is straightforward, and each page of the app must be run in sequence.
 
+## Main Idea
+
+The natural and state-of-the-art way to measure all trees in a point cloud is to load a point cloud, compute a Canopy Height Model (CHM), and apply an individual tree detection algorithm. Then, in the context of a plantation, with know trees match the detected trees with the trees in the database.
+
+![](principle1.png)
+
+While this solution is the natural approach, it has a weakness: no individual tree detection algorithm is perfect. Some trees may be missing, or worse, some extra trees may be found by the algorithm, which can prevent a robust matching between the automatically detected trees and the database. If more trees are detected than actually exist, or fewer, the matching becomes very difficult, and correct measurements could be assigned to the wrong trees. This can happen more often than desired. In a context where each individual tree is known along with its clone code and other data, misassignments are not acceptable.
+
+Therefore, the problem is approached the opposite way. Instead of detecting trees from the CHM to match the database, we match the database to the CHM and use the hypothetical tree positions as a reference to find the trees.
+
+![](principle2.png)
+
+This approach is less natural but guarantees a more robust matching, with errors more easily detectable, as we are 100% certain that the exact number of expected trees is present, allowing for a one-to-one matching.
+
 ## Input Standards
 
 This section describes the type of data consumed by the app and how to respect certain standards in order to make everything working and computer readable (especially Excel file).
