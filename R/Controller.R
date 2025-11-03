@@ -310,6 +310,13 @@ public = list(
     new_layout = relocate_trees(chm, echm, plan, spacing, hmin, progress)
 
     self$model$layout_warnings = validate_tree(new_layout, plan, spacing)
+
+    if (!is.null(self$model$layout_warnings))
+    {
+      err = self$model$layout_warnings$err
+      stop(paste0(nrow(err), " invalid tree detected. Some trees are duplicated. This should never happen. Please report to info@r-lidar.com"))
+    }
+
     self$model$layout$tree_layout_adjusted = new_layout
 
     self$model$params$treesHmin = hmin
@@ -400,9 +407,12 @@ public = list(
     if (file.exists(self$fdebug))
       file.remove(self$fdebug)
 
-    sf::st_write(self$model$layout_warnings$move, dsn = self$fdebug, layer = "moves", quiet = TRUE, append = FALSE)
+    if (!is.null(self$model$layout_warnings$move))
+      sf::st_write(self$model$layout_warnings$move, dsn = self$fdebug, layer = "moves", quiet = TRUE, append = FALSE)
     if (!is.null(self$model$layout_warnings$warn))
       sf::st_write(self$model$layout_warnings$warn, dsn = self$fdebug, layer = "warnings", quiet = TRUE, append = FALSE)
+    if (!is.null(self$model$layout_warnings$err))
+      sf::st_write(self$model$layout_warnings$err, dsn = self$fdebug, layer = "errors", quiet = TRUE, append = FALSE)
   },
 
   save_chm = function()

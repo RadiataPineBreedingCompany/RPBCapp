@@ -123,13 +123,15 @@ validate_tree = function(trees, plan, spacing)
   {
     i = validation[err]
     err = trees[trees$TREEID %in% i$TREEID,]
-    plot(sf::st_geometry(err), col = "red", cex = 2, add = T)
-    #st_write(err, ftreeserr, delete_dsn = TRUE)
-    stop(paste0(nrow(err), " invalid tree detected. Some trees are duplicated. This should never happen. Please report to info@r-lidar.com"))
+    xy = sf::st_geometry(err)
+    xy = sf::st_as_sf(xy)
+    th = 0.5*min(spacing)
+    xy = sf::st_buffer(xy, th)
+    return(list(err = xy))
   }
 
   # Too close trees = warning
-  th = spacing*0.5
+  th = 0.5*min(spacing)
   dist_matrix = sf::st_distance(trees)
   class(dist_matrix) = "matrix"
   diag(dist_matrix) <- Inf

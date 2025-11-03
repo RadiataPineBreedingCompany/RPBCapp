@@ -76,3 +76,19 @@ v$summary()
 v$plot_layout()
 v$leaflet()
 v$compute_tree_stats()
+
+
+
+
+
+
+file = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/Tutorial/BC52_3/BC53_3.rpbc"
+
+m <- PlantationModel$new()
+c <- PlantationController$new(m)
+v <- PlantationView$new(m)
+
+c$read_config(file)
+c$optim_layout()
+c$adjust_layout()
+v$leaflet()

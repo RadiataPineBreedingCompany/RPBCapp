@@ -172,7 +172,7 @@ server <- function(input, output, session)
   output$estimatedDensityValue = renderText(NA)
   output$recommandedFractionValue = renderText(NA)
 
-  volumes <- c(RPBC = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/", Home = fs::path_home(), shinyFiles::getVolumes()())
+  volumes <- c(Home = fs::path_home(), shinyFiles::getVolumes()(), RPBC = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/")
   shinyFiles::shinyFileChoose(input, "loadLasFileButton", roots = volumes, filetypes = c('las', "laz"))
   shinyFiles::shinyFileChoose(input, "loadCHMFileButton", roots = volumes, filetypes = c('tif', 'tiff'))
   shinyFiles::shinyFileChoose(input, "loadConfigFileButton", roots = volumes, filetypes = c('rpbc'))
@@ -245,6 +245,11 @@ server <- function(input, output, session)
       })
       output$mapTrees <- leaflet::renderLeaflet({
         make_base_map(c("CHM", "sCHM", "Boundaries", "Block layout", "Trees", "Crowns"))
+      })
+
+      output$rglplot3d <- rgl::renderRglwidget({
+        rgl::clear3d()       # clears the current scene
+        rgl::rglwidget()     # returns an empty widget
       })
     }
 
@@ -516,11 +521,15 @@ server <- function(input, output, session)
     safe_run({
       withProgress(message = 'Tree detection', value = 0, {
         plantation$adjust_layout(hmin, progress = incProgress)
-        plantation$save()
       })
+
       update_layout_in_maps(stats::runif(1))
-      update_debug_in_maps(stats::runif(1))
     })
+
+    plantation$save_debug()
+    plantation$write_config()
+    update_debug_in_maps(stats::runif(1))
+
   }, ignoreInit = TRUE)
 
   # ===== OnClick Run Measurement Button ====

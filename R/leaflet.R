@@ -194,6 +194,29 @@ add_warnings_layer <- function(map, layout_warnings, proxy = FALSE)
     )
   }
 
+  if (!is.null(layout_warnings$err))
+  {
+    err <- sf::st_transform(layout_warnings$err, 4326)
+
+    map <- map |> leaflet::addPolygons(
+      data = err,
+      opacity = 0.9,
+      group = "Error",
+      color = "red",
+      fill = FALSE,
+      weight = 3)
+
+    added <- c(added, "Error")
+
+    # map <- map |> leaflet::addLegend(
+    #   position = "bottomleft",
+    #   pal = "red",
+    #   values = "Identical",
+    #   title = "Warnings",
+    #   layerId = "warnings_legend"
+    # )
+  }
+
   if (length(added) == 0) list(map = map, groups = NULL) else list(map = map, groups = added)
 }
 
