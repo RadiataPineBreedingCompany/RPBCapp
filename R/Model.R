@@ -139,7 +139,14 @@ public = list(
       }
 
       boundaries = cbind(x, y)
-      boundaries = rbind(boundaries, boundaries[1,])
+
+      # Close if necessary
+      xi = boundaries[1,1]
+      yi = boundaries[1,2]
+      xf = boundaries[nrow(boundaries),1]
+      yf = boundaries[nrow(boundaries),2]
+      if (xi != xf | yi != yf) boundaries = rbind(boundaries, boundaries[1,])
+
       boundaries = sf::st_polygon(list(boundaries))
       boundaries = sf::st_sfc(boundaries)
       sf::st_crs(boundaries) = crs
