@@ -713,7 +713,7 @@ public = list(
       if (is.na(path)) return(NULL)
 
       ext <- tolower(tools::file_ext(path))
-      obj_type <- type_map[[ext]] %||% "Unknown"
+      obj_type <- if (!is.null(type_map[[ext]])) type_map[[ext]] else "Unknown"
 
       list(
         Object = label_map[[slot]],
