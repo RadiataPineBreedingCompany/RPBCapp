@@ -314,7 +314,8 @@ public = list(
     if (!is.null(self$model$layout_warnings))
     {
       err = self$model$layout_warnings$err
-      stop(paste0(nrow(err), " invalid tree detected. Some trees are duplicated. This should never happen. Please report to info@r-lidar.com"))
+      if (!is.null(err))
+        stop(paste0(nrow(err), " invalid tree detected. Some trees are duplicated. This should never happen. Please report to info@r-lidar.com"))
     }
 
     self$model$layout$tree_layout_adjusted = new_layout
