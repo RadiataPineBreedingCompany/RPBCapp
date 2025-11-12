@@ -13,8 +13,7 @@ remotes::install_github("RadiataPineBreedingCompany/RPBCapp")
 ## Usage
 
 ``` r
-library(RPBCapp)
-run_app()
+RPBCapp::run_app()
 ```
 
 
