@@ -216,7 +216,14 @@ measure_trees = function(trees, chm, echm, spacing, hmin, use_dalponte = TRUE, p
     segment = lidR::dalponte2016(echm, seeds, th_cr = 0, max_cr = min(spacing)/2/terra::res(echm)[1]*1.25, th_tree = hmin, ID = "TREEID")
     rcrowns = segment()
     pcrown = sf::st_as_sf(terra::as.polygons(rcrowns))
-    names(pcrown)[1] = "TREEID"
+    pcrown$TREEID = terra::extract(rcrowns, pcrown, fun = function(x) x[1])$Z # retrieve treeID
+    pcrown$Z = NULL
+
+    # Check if no ID is missing (trees out of raster)
+    ans  = seeds$TREEID %in% pcrown$TREEID
+    if (any(ans == FALSE))
+      stop("Some tree polygons are missing. This is likely because some trees are outside the CHM.")
+
     pcrown = pcrown[pcrown$TREEID <= nrow(trees),]
   }
 
