@@ -1,7 +1,7 @@
 Package: RPBCapp
 Type: Package
 Title: Tree Measurement In Radiata Pine Plantation App
-Version: 1.0.0
+Version: 1.1.0
 Authors@R: c(
     person(
       "Jean-Romain", "Roussel",
@@ -38,7 +38,8 @@ Imports:
 Suggests:
     knitr,
     rgl,
-    rmarkdown
+    rmarkdown,
+    remotes
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true

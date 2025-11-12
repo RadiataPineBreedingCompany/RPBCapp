@@ -106,18 +106,40 @@ ui <- page_navbar(
         )
       ),
 
-      card(
-        full_screen = FALSE,
-        card_header("Existing project"),
-        card_body(
-          tooltiped("Select an '.rpbc' config file", "The file will be read and the previous configuration restored."),
-          shinyFiles::shinyFilesButton(
-            'loadConfigFileButton', 'Select config file', 'Please select a config file',
-            FALSE,
-            icon = icon("gear")
+      div(
+        style = "display: flex; flex-direction: column; gap: 1rem;",
+        card(
+          full_screen = FALSE,
+          card_header("Existing project"),
+          card_body(
+            tooltiped(
+              "Select an '.rpbc' config file",
+              "The file will be read and the previous configuration restored."
+            ),
+            shinyFiles::shinyFilesButton(
+              'loadConfigFileButton',
+              'Select config file',
+              'Please select a config file',
+              FALSE,
+              icon = icon("gear")
+            )
+          )
+        ),
+        card(
+          full_screen = FALSE,
+          card_header("Update project"),
+          card_body(
+            tooltiped(
+              "Update current project configuration",
+              "This will exit the app to install the new version."
+            ),
+            p(strong("Current version: "), textOutput("currentVersion", inline = TRUE)),
+            p(strong("Online version available: "), textOutput("onlineVersion", inline = TRUE)),
+            actionButton("updateProjectButton", "Update project", icon = icon("refresh"))
           )
         )
       ),
+
 
       layout_columns(
         col_widths = c(8, 4),

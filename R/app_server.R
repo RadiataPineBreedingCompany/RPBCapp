@@ -1014,4 +1014,35 @@ server <- function(input, output, session)
       })
     }
   })
+
+  # ==== update app =====
+  output$onlineVersion <- renderText({
+    req(get_latest_version())
+    as.character(get_latest_version()[1])
+  })
+
+  output$currentVersion <- renderText({
+    as.character(utils::packageVersion("RPBCapp"))
+  })
+
+  observeEvent(input$updateProjectButton, {
+    showModal(
+      modalDialog(
+        title = "Confirm update",
+        "Are you sure you want to update the project? This will close the app.",
+        footer = tagList(
+          modalButton("Cancel"),
+          actionButton("confirmUpdate", "Yes, update", class = "btn-primary")
+        ),
+        easyClose = FALSE
+      )
+    )
+  })
+
+  # Handle confirmation
+  observeEvent(input$confirmUpdate, {
+    removeModal()
+    stopApp("upgrade")
+  })
+
 }

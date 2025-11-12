@@ -6,5 +6,17 @@
 run_app <- function(browser = TRUE)
 {
   shiny::addResourcePath("www", system.file("app/www/", package = "RPBCapp"))
-  shiny::shinyApp(ui = ui, server = server, options = list(launch.browser = browser))
+
+  # create the app
+  app <- shiny::shinyApp(ui = ui, server = server)
+
+  # run it and capture the stopApp() return value
+  ans <- shiny::runApp(app, launch.browser = browser)
+
+  if (identical(ans, "upgrade")) {
+    message("Updating RPBCapp from GitHub...")
+    remotes::install_github("RadiataPineBreedingCompany/RPBCapp", upgrade = "never")
+  }
+
+  invisible()
 }
