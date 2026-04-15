@@ -266,7 +266,26 @@ PlantationView <- R6Class("PlantationView",
         ) +
         ggplot2::theme_bw()
 
-      out[[3]] = ggplot2::ggplot(trees) +
+      if ("vol_concave" %in% names(trees))
+      {
+        out[[3]] = ggplot2::ggplot(trees) +
+          ggplot2::aes(x = vol_concave) +
+          ggplot2::geom_histogram(binwidth = 5, fill = "lightgreen", color = "black") +
+          ggplot2::geom_vline(
+            xintercept = mean(trees$vol_concave, na.rm = TRUE),
+            color = "red",
+            linetype = "dashed",
+            size = 1
+          ) +
+          ggplot2::labs(
+            title = "Crown Volume Distribution",
+            x = "Volume (m\u00B3)",
+            y = "Count"
+          ) +
+          ggplot2::theme_bw()
+      }
+
+      out[[4]] = ggplot2::ggplot(trees) +
         ggplot2::aes(x = .data[[BLOCKNAME]], y = Height, fill = as.factor(.data[[BLOCKNAME]])) +
         ggplot2::geom_boxplot(outlier.shape = NA, alpha = 0.7) +
         ggplot2::theme_bw() +
@@ -285,7 +304,7 @@ PlantationView <- R6Class("PlantationView",
       code_var <- intersect(FAMILYCODENAMES, names(trees))[1]
       if (!is.na(code_var))
       {
-        out[[4]] <- ggplot2::ggplot(trees) +
+        out[[5]] <- ggplot2::ggplot(trees) +
           ggplot2::aes(
             x = as.factor(.data[[code_var]]),
             y = Height,
@@ -307,7 +326,7 @@ PlantationView <- R6Class("PlantationView",
       code_var <- intersect(CLONECODENAMES, names(trees))[1]
       if (!is.na(code_var))
       {
-        out[[4]] <- ggplot2::ggplot(trees) +
+        out[[6]] <- ggplot2::ggplot(trees) +
           ggplot2::aes(
             x = as.factor(.data[[code_var]]),
             y = Height,
@@ -417,6 +436,55 @@ PlantationView <- R6Class("PlantationView",
         rgl::points3d(gnd$X-offset[1], gnd$Y-offset[2], gnd$Z-offset[3], col = "blue", size = 2, tag = "ground")
         rgl::points3d(ngnd$X-offset[1], ngnd$Y-offset[2], ngnd$Z-offset[3], col = col, size = 2, tag = "vegetation")
       }
+    },
+
+    plot_tree3d = function(id, useNULL = FALSE, alpha = 1, zth = 1)
+    {
+      rgl::open3d(useNULL = useNULL)
+      rgl::bg3d("black")
+
+      if (!self$model$has_cloud())
+        stop("No point cloud loaded in memory. Cannot render in 3D.")
+
+      if (!self$model$has_crowns())
+        stop("No segmentation of individual trees. Cannot render in 3D.")
+
+      if (lidR::npoints(self$model$las) == 0)
+        return()
+
+      cr = self$model$crowns[id,]
+      u = lidR:::point_in_polygons(self$model$las, sf::st_geometry(cr))
+      las = lidR::filter_poi(self$model$las, !is.na(u))
+
+      offset = c(0,0,0)
+      if (is.null(las))
+        stop("NULL point cloud")
+
+      xmin = las@header[["Min X"]]
+      xmax = las@header[["Max X"]]
+      ymin = las@header[["Min Y"]]
+      ymax = las@header[["Max Y"]]
+      zmin = las@header[["Min Z"]]
+      zmax = las@header[["Max Z"]]
+      offset = c((xmin+xmax)/2, (ymin+ymax)/2, zmin)
+
+      X = las$X-offset[1]
+      Y = las$Y-offset[2]
+      Z = las$Z-offset[3]
+      rm = Z < zth
+      X = X[!rm]
+      Y = Y[!rm]
+      Z = Z[!rm]
+
+      a3d <- cbind(X,Y,Z)
+      alpha  <- c(alpha)
+      ashape <- alphashape3d::ashape3d(x = a3d, alpha = alpha, pert = TRUE)
+
+
+      pal = lidR::height.colors(25)
+      col = lidR:::set.colors(las$Z, pal)
+      plot(ashape, indexAlpha = 1, transparency = 0.5)
+      rgl::points3d(las$X-offset[1], las$Y-offset[2], las$Z-offset[3], col = col, size = 4)
     },
 
     get_object_by_index = function(i)

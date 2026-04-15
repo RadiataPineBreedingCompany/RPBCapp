@@ -1,7 +1,7 @@
 Package: RPBCapp
 Type: Package
 Title: Tree Measurement In Radiata Pine Plantation App
-Version: 1.1.0
+Version: 1.2.0
 Authors@R: c(
     person(
       "Jean-Romain", "Roussel",
@@ -34,7 +34,8 @@ Imports:
   viridis,
   ggplot2,
   geojsonsf,
-  fs
+  fs,
+  alphashape3d
 Suggests:
     knitr,
     rgl,
@@ -56,6 +57,7 @@ Collate:
     'app_ui.R'
     'globals.R'
     'leaflet.R'
+    'metrics.R'
     'progress.R'
     'segmentation.R'
     'snake.R'

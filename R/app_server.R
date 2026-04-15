@@ -167,19 +167,31 @@ server <- function(input, output, session)
   update_file_table  <- reactiveVal(0)
   update_state_table <- reactiveVal(0)
   update_rgl_view    <- reactiveVal(0)
+  update_rgltree     <- reactiveVal(0)
   saveProject        <- reactiveVal(0)
+  last_dir           <- reactiveVal(fs::path_home())
 
   output$estimatedDensityValue = renderText(NA)
   output$recommandedFractionValue = renderText(NA)
 
-  volumes <- c(Home = fs::path_home(), shinyFiles::getVolumes()(), RPBC = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/")
-  shinyFiles::shinyFileChoose(input, "loadLasFileButton", roots = volumes, filetypes = c('las', "laz"))
-  shinyFiles::shinyFileChoose(input, "loadCHMFileButton", roots = volumes, filetypes = c('tif', 'tiff'))
-  shinyFiles::shinyFileChoose(input, "loadConfigFileButton", roots = volumes, filetypes = c('rpbc'))
-  shinyFiles::shinyFileChoose(input, "loadBoundaryFileButton", roots = volumes, filetypes = c('shp', "gpkg"))
-  shinyFiles::shinyFileChoose(input, "loadTreeMapFileButton", roots = volumes, filetypes = c('shp', "gpkg"))
-  shinyFiles::shinyFileChoose(input, "loadBlockPatternFileButton", roots = volumes, filetypes = c('xls', 'xlsx'))
-  shinyFiles::shinyFileSave(input, "createProjectButton", roots = volumes)
+  volumes_reactive <- reactive({
+    c(
+      Last = last_dir(),
+      Home = fs::path_home(),
+      shinyFiles::getVolumes()(),
+      RPBC = "/home/jr/Documents/r-lidar/clients/RPBC/Plantations/Tutorial/Examples"
+    )
+  })
+
+  observe({
+    shinyFiles::shinyFileChoose(input, "loadLasFileButton", roots = volumes_reactive(), filetypes = c('las', "laz"))
+    shinyFiles::shinyFileChoose(input, "loadCHMFileButton", roots = volumes_reactive(), filetypes = c('tif', 'tiff'))
+    shinyFiles::shinyFileChoose(input, "loadConfigFileButton", roots = volumes_reactive(), filetypes = c('rpbc'))
+    shinyFiles::shinyFileChoose(input, "loadBoundaryFileButton", roots = volumes_reactive(), filetypes = c('shp', "gpkg"))
+    shinyFiles::shinyFileChoose(input, "loadTreeMapFileButton", roots = volumes_reactive(), filetypes = c('shp', "gpkg"))
+    shinyFiles::shinyFileChoose(input, "loadBlockPatternFileButton", roots = volumes_reactive(), filetypes = c('xls', 'xlsx'))
+    shinyFiles::shinyFileSave(input, "createProjectButton", roots = volumes_reactive())
+  })
 
   # ===== Init Map ====
 
@@ -227,6 +239,8 @@ server <- function(input, output, session)
       update_state_table(stats::runif(1))
       update_stats_ui(stats::runif(1))
 
+      last_dir(dirname(file))
+
       output$mapTreeLayout <- leaflet::renderLeaflet({
         make_base_map(c("CHM", "sCHM", "Boundaries", "Block layout", "Move", "Warnings", "Tree layout")) |>
           leaflet.extras::addDrawToolbar(
@@ -251,6 +265,11 @@ server <- function(input, output, session)
         rgl::clear3d()       # clears the current scene
         rgl::rglwidget()     # returns an empty widget
       })
+
+      output$rglplot3dtree <- rgl::renderRglwidget({
+        rgl::clear3d()
+        rgl::rglwidget()
+      })
     }
 
   }, ignoreInit = TRUE)
@@ -259,7 +278,7 @@ server <- function(input, output, session)
 
   observeEvent(input$loadConfigFileButton, {
 
-    file <- shinyFiles::parseFilePaths(volumes, input$loadConfigFileButton)$datapath
+    file <- shinyFiles::parseFilePaths(volumes_reactive(), input$loadConfigFileButton)$datapath
 
     if (is.null(file) || (length(file) == 0))
       return(NULL)
@@ -293,6 +312,12 @@ server <- function(input, output, session)
       updateSliderInput(session, "rigidness", value = plantation$model$params$rigidness)
       updateSliderInput(session, "cloth_resolution", value = plantation$model$params$cloth_resolution)
       updateSliderInput(session, "res", value = plantation$model$params$resCHM)
+
+      if (plantation$model$is_segmented())
+      {
+        ntrees = nrow(plantation$model$crowns)
+        updateSliderInput(session, "sliderViewTreeID", max = ntrees)
+      }
 
       cat("Estimate density\n")
 
@@ -336,7 +361,7 @@ server <- function(input, output, session)
 
   observeEvent(input$loadLasFileButton, {
 
-    path <- shinyFiles::parseFilePaths(volumes, input$loadLasFileButton)$datapath
+    path <- shinyFiles::parseFilePaths(volumes_reactive(), input$loadLasFileButton)$datapath
 
     if (is.null(path) || length(path) == 0) return(NULL)
 
@@ -368,6 +393,8 @@ server <- function(input, output, session)
 
       update_state_table(stats::runif(1))
       update_file_table(stats::runif(1))
+
+      last_dir(dirname(path))
     })
   }, ignoreInit = TRUE)
 
@@ -375,7 +402,7 @@ server <- function(input, output, session)
 
   observeEvent(input$loadBlockPatternFileButton, {
 
-    file <- shinyFiles::parseFilePaths(volumes, input$loadBlockPatternFileButton)$datapath
+    file <- shinyFiles::parseFilePaths(volumes_reactive(), input$loadBlockPatternFileButton)$datapath
 
     if (is.null(file) || length(file) == 0)
       return(NULL)
@@ -402,7 +429,7 @@ server <- function(input, output, session)
   # ===== OnClick Load Boundary File Button ====
   observeEvent(input$loadBoundaryFileButton, {
 
-    file <- shinyFiles::parseFilePaths(volumes, input$loadBoundaryFileButton)$datapath
+    file <- shinyFiles::parseFilePaths(volumes_reactive(), input$loadBoundaryFileButton)$datapath
 
     if (is.null(file) || length(file) == 0)
       return(NULL)
@@ -422,7 +449,7 @@ server <- function(input, output, session)
 
   observeEvent(input$loadCHMFileButton, {
 
-    file <- shinyFiles::parseFilePaths(volumes, input$loadCHMFileButton)$datapath
+    file <- shinyFiles::parseFilePaths(volumes_reactive(), input$loadCHMFileButton)$datapath
 
     if (is.null(file) || length(file) == 0)
       return(NULL)
@@ -442,7 +469,7 @@ server <- function(input, output, session)
 
   observeEvent(input$loadTreeMapFileButton, {
 
-    file <- shinyFiles::parseFilePaths(volumes, input$loadTreeMapFileButton)$datapath
+    file <- shinyFiles::parseFilePaths(volumes_reactive(), input$loadTreeMapFileButton)$datapath
 
     if (is.null(file) || length(file) == 0)
       return(NULL)
@@ -532,9 +559,9 @@ server <- function(input, output, session)
 
   }, ignoreInit = TRUE)
 
-  # ===== OnClick Run Measurement Button ====
+  # ===== OnClick Run Segment Button ====
 
-  observeEvent(input$runMeasurementButton, {
+  observeEvent(input$runSegmentButton, {
 
     hmin = isolate(input$hminMeasureTreesSlider)
 
@@ -561,6 +588,40 @@ server <- function(input, output, session)
     })
   }, ignoreInit = TRUE)
 
+
+  # ===== OnClick Run Measurement Button ====
+
+  observeEvent(input$runMeasurementButton, {
+
+    hmin = isolate(input$hminMeasureTreesSlider)
+
+    if (is.null(hmin)) {
+      popup_error("Internal error: hmin = NULL")
+      return(NULL)
+    }
+
+    safe_run({
+      if (!plantation$model$is_segmented())
+        stop("Tree segmentation not found yet. Please run tree segmentation first (tab 6)")
+
+      withProgress(message = 'Computing metrics', value = 0, {
+        plantation$metric_trees(input$fractionMetrics, input$alpha, input$zthmetric, incProgress)
+      })
+      plantation$save()
+
+      ntrees = nrow(plantation$model$crowns)
+      updateSliderInput(session, "sliderViewTreeID", max = ntrees)
+    })
+
+    update_file_table(stats::runif(1))
+    update_trees_in_maps(stats::runif(1))
+    update_state_table(stats::runif(1))
+    update_stats_ui(stats::runif(1))
+
+    show_notification("Metrics computation completed")
+
+  }, ignoreInit = TRUE)
+
   # ===== OnClick Export Trees Button ====
 
   observeEvent(input$exportTreesButton, {
@@ -569,7 +630,7 @@ server <- function(input, output, session)
 
     safe_run({
       withProgress(message = 'Exporting trees', value = 0, {
-        plantation$export_trees(incProgress)
+        plantation$export_trees(input$fractionMetrics, incProgress)
       })
     })
   }, ignoreInit = TRUE)
@@ -695,6 +756,17 @@ server <- function(input, output, session)
     },
     ignoreInit = TRUE
   )
+
+  observeEvent(input$sliderViewTreeID,
+  {
+    plantation$reload(input$fractionMetrics)
+    update_rgltree(stats::runif(1))
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$fractionMetrics,
+  {
+    plantation$needs_las_reload = TRUE
+  })
 
   # ===== OnClick CRS Modal Windows Ok ====
 
@@ -963,6 +1035,15 @@ server <- function(input, output, session)
       rgl::toggleWidget(tags = "ground") |>
       rgl::toggleWidget(tags = "vegetation")
     u
+  })
+
+  output$rglplot3dtree <- rgl::renderRglwidget({
+    update_rgltree()
+    show_notification("Reading the point cloud")
+    plantation$reload(input$fractionMetrics)
+    show_notification("Rendering 3D tree")
+    plantation_view$plot_tree3d(input$sliderViewTreeID, TRUE, alpha = input$alpha, zth = input$zthmetric)
+    rgl::rglwidget()
   })
 
 

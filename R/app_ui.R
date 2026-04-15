@@ -323,19 +323,15 @@ ui <- page_navbar(
 
   # ---- nav 6 measurements ----
   nav_panel(
-    title = "6. Measurement",
+    title = "6. Segmentation",
     layout_sidebar(
       title = "Sidebar 6",
       sidebar = sidebar(
         width = 300,
         wellPanel(
-          tags$p("Once the trees are detected run tree measurement"),
+          tags$p("Once the trees are detected run tree segmentation"),
           sliderInput("hminMeasureTreesSlider", "Minimal height", min = 0, max = 10, value = 3, step = 0.25),
-          actionButton("runMeasurementButton", "Measure trees")
-        ),
-        wellPanel(
-          tags$p("Export individual point clouds for each trees"),
-          actionButton("exportTreesButton", "Export trees")
+          actionButton("runSegmentButton", "Segment trees")
         )
       ),
       div(
@@ -345,9 +341,40 @@ ui <- page_navbar(
     )
   ),
 
-  # ---- nav 7 statistics ----
+  # ---- nav 7 individual tree ----
   nav_panel(
-    title = "7. Statistics",
+    title = "7. Individual trees",
+    layout_sidebar(
+      title = "Sidebar 7",
+      sidebar = sidebar(
+        width = 300,
+        wellPanel(
+          tags$p("Once the trees are segmented run tree metrics"),
+          sliderInput("fractionMetrics", "Point cloud fraction", min = 0, max = 1, value = 1, step = 0.1),
+          sliderInput("alpha", "Alpha shape", min = 0, max = 10, value = 1, step = 0.5),
+          sliderInput("zthmetric", "Z Threshold", min = 0, max = 2, value = 1, step = 0.1),
+          actionButton("runMeasurementButton", "Compute metrics")
+        ),
+        wellPanel(
+          tags$p("View one tree"),
+          sliderInput("sliderViewTreeID", "Tree ID", min = 0, max = 0, value = 0, step = 1),
+        ),
+        wellPanel(
+          tags$p("Export individual point clouds for each trees"),
+          actionButton("exportTreesButton", "Export trees")
+        )
+      ),
+      div(
+        style = "width: 100%; height: 100%;",
+        rgl::rglwidgetOutput("rglplot3dtree",width = "100%", height = "100%")
+      )
+    )
+  ),
+
+
+  # ---- nav 8 statistics ----
+  nav_panel(
+    title = "8. Statistics",
 
     layout_column_wrap(
       width = 1/3,  # three boxes in one row

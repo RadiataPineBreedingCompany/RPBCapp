@@ -3,7 +3,7 @@ library(RPBCapp)
 # Read a conf file
 # ===========================
 
-file = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/Examples/example3-nonstandard/example3.rpbc"
+file = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/Examples/example1-base/example1.rpbc"
 db = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/BC52_1/BC52_1 linear file.xlsx"
 pb = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/BC52_1/BC52_1_Kinleith_2019_ULS_subsampled.laz"
 shp = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/Examples/example3-nonstandard/plan.gpkg"
@@ -13,6 +13,7 @@ file = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/BC66_1/BC66_1_Kin
 db = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/BC66_1/BC66_1_DATAFILE.xlsx"
 
 file = "/home/jr/Documents/Entreprise/clients/RPBC/Plantations/BC66_2/BC66_2_Kaingaroa.rpbc"
+file = "/home/jr/Documents/r-lidar/clients/RPBC/Plantations/Tutorial/Examples/example1-base/BC19.rpbc"
 
 edited = structure(list(`_leaflet_id` = 9736, layerId = 2283, radius = 1,
                geometry = structure(list(structure(c(1917038.9224887, 5737645.90468869
@@ -27,12 +28,13 @@ c <- PlantationController$new(m)
 v <- PlantationView$new(m)
 
 c$read_config(file)
-m$layout_warnings <-NULL
-plot(m$layout$tree_layout_oriented$geometry)
-v$leaflet( dtm = TRUE, chm = FALSE, schm = TRUE, bound = FALSE, bbox = FALSE, trees = FALSE, crowns = FALSE, layout = TRUE)
-c$replace_trees(edited)
-plot(m$layout$tree_layout_oriented$geometry)
-v$leaflet( dtm = TRUE, chm = FALSE, schm = TRUE, bound = FALSE, bbox = FALSE, trees = FALSE, crowns = FALSE, layout = TRUE)
+v$leaflet( dtm = TRUE, chm = FALSE, schm = TRUE, bound = FALSE, bbox = FALSE, trees = TRUE, crowns = TRUE, layout = TRUE)
+c$adjust_layout()
+c$measure_trees()
+c$metric_trees(0.05)
+
+
+v$plot_tree3d(10)
 
 c$set_database(db)
 c$set_layout(shp)

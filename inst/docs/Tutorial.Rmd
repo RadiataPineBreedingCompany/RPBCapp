@@ -234,22 +234,42 @@ After tree adjustment, the user may see some <span style="color: purple;">**purp
 
 Once the adjustment is satisfactory, the user can proceed to the next pane.
 
-## Panel 6: Measurement
+## Panel 6: Segmentation
 
 ![](page6.png){width=100%}
-This pane perform the actuall measurement of the trees.
+This pane perform the segmentation of the trees and measure basic metrics such as crown areas.
 
 The `hmin` parameter sets a height threshold below which a pixel in the **Smoothed** CHM is no longer considered part of a tree crown. Users can adjust this parameter to improve segmentation. Usually this value must be set approximately to the height of the edge of the trees in  the **Smoothed** CHM.
 
 ![](hmin_dalponte.png){width=100%}
 Left: too high `hmin` leads to undersized polygons. Right: with a lower `hmin` polygons are fitting more accurately.
 
-Next, click the <kbd>Measure trees</kbd> button to run the individual tree segmentation. Once the segmentation is satisfactory, the user has the option to export each tree in the plantation as an individual point cloud using <kbd>Export trees</kbd>.
+Next, click the <kbd>Measure trees</kbd> button to run the individual tree segmentation.
 
 
-## Panel 7:  Statistics
+## Panel 7: Individual Trees
 
 ![](page7.png){width=100%}
+
+This pane is used to perform operations on individual trees. The first card allows to compute individual tree metrics. The metrics computed for each tree are those from `lidR::stdmetrics`, plus two volume metrics based on the alpha-shape concave hull (from the `alphashape3d` package) and convex hull.
+
+Computing the convex hull and the volume of each hull is very time-consuming. This is why the pane includes a slider called `Point cloud fraction`. This slider enables loading only a fraction of the point cloud and computing the hulls faster **for quick testing purposes**. Hull volumes are highly unstable, and their values significantly decrease with point cloud decimation. Indeed, a single point can have a massive impact on the measured volume. Crown hulls are strongly affected by a single outlying point. We recommend using a fraction of 1 to use all points. However, for quick testing, using 0.1 can save dozens of minutes.
+
+The second slider controls the `alpha` value of the alpha shapes. It is recommended to use `1` but one may want to test other values. Using high values for alpha is equivalent to the computation of the convex hull. The convex hull is already computed internally, thus using `alpha < 5` is recommanded.
+
+The last slider is the most important. It sets a threshold below which points are discarded and not used to compute the hulls and the metrics. Indeed, we may not want to include ground points in the hull and the metrics. This slider controls that threshold (see illustration below).
+
+When the user clicks on <kbd>Compute metrics</kbd> or move the slider `Tree ID`, the point cloud is loaded into memory (not the full point cloud, only the selected fraction). 
+When the user clicks on <kbd>Compute metrics</kbd> all metrics are computed. Once the point cloud is in memory, the next card, with the `Tree ID` slider is enabled and allows rendering of a single tree with its concave hull. At this point, moving the sliders `alpha`, `Z threshold`, or `Tree ID` updates the 3D view and displays the effect of the different parameters.
+
+Once the point cloud is loaded in memory, the user has the option to export each tree in the plantation as an individual point cloud using <kbd>Export trees</kbd>.
+
+![](alphashape.png){width=100%}
+
+
+## Panel 8:  Statistics
+
+![](page8.png){width=100%}
 
 This panel displays several statistics derived from the tree segmentation process. No user intervention is required. The three key figures are:
 

@@ -21,6 +21,7 @@ public = list(
   ftrees = NULL,
   fcrowns = NULL,
   fmeasurements = NULL,
+  needs_las_reload = TRUE,
 
   initialize = function(model)
   {
@@ -134,6 +135,18 @@ public = list(
 
   has_layout = function() { return(self$model$has_layout()) },
   has_tree_map = function() { return(!is.null(self$model$layout$tree_layout_raw)) },
+
+  reload = function(fraction)
+  {
+    if (self$needs_las_reload)
+    {
+      self$model$read_cloud(self$flas, fraction)
+      self$model$clip()
+      self$model$las = lidR::normalize_height(self$model$las, self$model$dtm) |> suppressWarnings()
+      self$needs_las_reload = FALSE
+    }
+  },
+
 
   create_config = function(file)
   {
@@ -356,7 +369,51 @@ public = list(
     self$write_config()
   },
 
-  export_trees = function(progress = NULL)
+  metric_trees = function(fraction = 1, alpha = 1, zth = 1, progress = NULL)
+  {
+    if (!self$model$has_crowns())
+      stop("Delineation not performed yet")
+
+
+    prog <- make_progress(progress, 3)
+    on.exit(prog$finalize(), add = TRUE)
+
+    prog$tick(1, "Reading point cloud")
+    self$reload(fraction)
+
+    las = self$model$las
+
+    crowns = self$model$crowns
+    typ = sf::st_geometry_type(crowns) == "POLYGON"
+    crowns = crowns[typ,]
+    pol = sf::st_geometry(crowns)
+
+    ids = lidR:::point_in_polygons(las, pol)
+    pset = crowns[[BLOCKNAME]][ids]
+    tops = crowns[[TPOSNAME]][ids]
+    las@data$Pset = pset
+    las@data$Tpos = tops
+
+    prog$tick(2, "Computing metrics")
+
+    ans = las@data[!is.na(Pset) & Z > zth, c(lidR::stdmetrics(X, Y, Z, Intensity, ReturnNumber, Classification), hull_metrics(X,Y,Z, alpha)), by = list(Pset, Tpos)]
+
+    overlap <- intersect(names(self$model$trees), names(ans))
+    cols_to_remove <- setdiff(overlap, c(BLOCKNAME, TPOSNAME))
+
+    self$model$trees  <- self$model$trees[, !(names(self$model$trees) %in% cols_to_remove)]
+    self$model$crowns <- self$model$crowns[, !(names(self$model$crowns) %in% cols_to_remove)]
+
+    self$model$trees  <- merge(self$model$trees, ans, by = c(BLOCKNAME, TPOSNAME), all.x = TRUE)
+    self$model$crowns <- merge(self$model$crowns, ans, by = c(BLOCKNAME, TPOSNAME), all.x = TRUE)
+
+    prog$tick(3, "Done")
+
+    self$save_measurements()
+    self$write_config()
+  },
+
+  export_trees = function(fraction, progress = NULL)
   {
     if(!self$model$has_crowns()) stop("Crowns not available. Measure the trees first")
 
@@ -372,8 +429,7 @@ public = list(
 
     prog$tick(1/2*n, "Reading point cloud")
 
-    if (!self$model$has_cloud())
-      self$model$read_cloud(self$flas, self$model$params$keepRandomFraction)
+    self$reload(fraction)
 
     las = self$model$las
 

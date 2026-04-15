@@ -366,7 +366,7 @@ public = list(
     if (fraction  < 1)
       filter = paste("-keep_random_fraction", fraction)
 
-    self$las = lidR::readLAS(file, select = "xyzc", filter = filter)
+    self$las = lidR::readLAS(file, select = "xyzcir", filter = filter)
 
     if (sf::st_crs(self$las) == sf::NA_crs_)
       self$set_crs(self$crs)
@@ -498,6 +498,11 @@ public = list(
     return(!is.null(self$layout$tree_layout_adjusted))
   },
 
+  is_segmented = function()
+  {
+    return(!is.null(self$crowns))
+  },
+
   reset = function()
   {
     self$las = NULL             # LAS
@@ -521,7 +526,7 @@ public = list(
     if (is.na(self$crs))  return(FALSE)
     return(TRUE)
   },
-  has_cloud = function() { return((is.null(self$las))) },
+  has_cloud = function() { return((!is.null(self$las))) },
   has_boundaries = function() { return(!is.null(self$boundaries)) },
   has_chm = function() { return(!is.null(self$chm)) },
   has_schm = function() { return(!is.null(self$schm)) },
