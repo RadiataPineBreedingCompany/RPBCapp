@@ -178,8 +178,8 @@ server <- function(input, output, session)
     c(
       Last = last_dir(),
       Home = fs::path_home(),
-      shinyFiles::getVolumes()(),
-      RPBC = "/home/jr/Documents/r-lidar/clients/RPBC/Plantations/Tutorial/Examples"
+      shinyFiles::getVolumes()()#,
+      #RPBC = "/home/jr/Documents/r-lidar/clients/RPBC/Plantations/Tutorial/Examples"
     )
   })
 
@@ -224,7 +224,7 @@ server <- function(input, output, session)
 
   observeEvent(input$createProjectButton, {
 
-    file <- shinyFiles::parseSavePath(volumes, input$createProjectButton)$datapath
+    file <- shinyFiles::parseSavePath(volumes_reactive(), input$createProjectButton)$datapath
 
     if (!is.null(file) && length(file) > 0)
     {
